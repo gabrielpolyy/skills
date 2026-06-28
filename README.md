@@ -28,3 +28,7 @@ ln -s "$PWD/codex-review" /path/to/project/.claude/skills/codex-review
 ```
 
 Restart Claude Code (or start a new session) so it picks up the skill.
+
+## License
+
+[MIT](./LICENSE)
