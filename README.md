@@ -26,6 +26,19 @@ Invoke with `/codex-implement`, typically as "plan X, then /codex-implement".
 
 **Requires** the [`codex`](https://github.com/openai/codex) CLI on your `PATH`.
 
+### [`sde`](./sde)
+
+The full pipeline in one command: the main-loop model (e.g. Fable) plans and writes
+a near-final spec, an Opus subagent implements it, the planner reviews the diff and
+loops fixes back, and finally the `codex-review` skill runs an external
+second-opinion review whose findings get triaged and fixed until clean.
+
+Invoke with `/sde <task>`, e.g. "add retry logic to the uploader /sde".
+
+**Requires** the [`codex-review`](./codex-review) skill (this repo) and the
+[`codex`](https://github.com/openai/codex) CLI on your `PATH` for the final review
+step.
+
 ## Installing a skill
 
 Copy (or symlink) a skill directory into your Claude Code skills folder:
