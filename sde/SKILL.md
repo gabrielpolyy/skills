@@ -1,6 +1,6 @@
 ---
 name: sde
-description: Full software-development-engineer pipeline in one command — the main-loop model (Fable) plans and orchestrates, an Opus subagent writes the code, Fable reviews the resulting diff and loops fixes back, then the codex-review skill runs an external second-opinion review and its findings are triaged and fixed until clean. Use when the user types /sde with a task ("do this /sde", "/sde add X"), or asks for the full plan→build→review→codex pipeline in one shot.
+description: Full software-development-engineer pipeline in one command — the main-loop model (Fable) plans and orchestrates, an Opus subagent writes the code, Fable reviews the resulting diff and loops fixes back, the codex-review skill runs an external second-opinion review and its findings are triaged and fixed until clean, and if the change is user-facing and the project has an e2e harness (e.g. a browser-e2e skill), it ends with an end-to-end verification in the running app. Use when the user types /sde with a task ("do this /sde", "/sde add X"), or asks for the full plan→build→review→codex pipeline in one shot.
 user-invocable: true
 ---
 
@@ -15,6 +15,9 @@ One command that runs a whole engineering loop with a division of labor:
    spec, and loops real findings back to the same subagent until clean.
 4. **External review** — invoke the **`codex-review` skill** for an independent
    second opinion, then triage/fix its findings per that skill's own loop.
+5. **E2E verify (when possible and needed)** — if the change is user-facing and
+   the project has an e2e harness (e.g. a `browser-e2e` skill), drive the real
+   app through the changed flow before reporting done.
 
 The planner pays its (higher) rate only for the spec and the reviews; the bulk
 typing bills at Opus's rate; codex is a genuinely independent reviewer at the end.
@@ -79,11 +82,34 @@ codex's findings, triage with your own judgment, fix the valid ones, and re-revi
 until codex is clean or nothing new and valid remains. `/sde` is the user's
 explicit request for this review — don't ask again before running it.
 
-### 5. Report
+### 5. E2E verification (when possible and needed)
+
+Unit tests and reviews check the code; this step checks the product. Run it only
+when **both** hold:
+
+- **Needed** — the change affects behavior a user actually reaches (UI, routes,
+  flows, rendered output). Skip for pure refactors, test-only, doc, or internal
+  tooling changes.
+- **Possible** — the project has a real way to drive the running app: a project
+  e2e skill (e.g. `browser-e2e`), a `run`-style skill, or a documented dev-server
+  + browser-automation path. Don't build an e2e harness from scratch just for
+  this — that's its own task.
+
+If both hold, invoke the project's e2e skill via the Skill tool and walk the
+**changed flow specifically** (not a generic smoke test): exercise the new
+behavior as the user would, and capture screenshots if the harness supports them.
+Anything broken loops back to the **same** builder subagent (as in step 3), then
+re-verify.
+
+If either condition fails, skip the step — but say so explicitly in the report
+(one line: skipped, and why).
+
+### 6. Report
 
 One final summary: what shipped (files + behavior), test status, what the planner
 review changed, what codex flagged and what you fixed vs. skipped (with one-line
-reasons), and any spec deviation you accepted.
+reasons), the e2e verification outcome (or why it was skipped), and any spec
+deviation you accepted.
 
 ## Guardrails
 
@@ -95,4 +121,5 @@ reasons), and any spec deviation you accepted.
   Agent call.
 - **Stop conditions.** Build/fix loop: clean diff or only dismissed nits.
   Codex loop: per the codex-review skill (clean, no new valid findings, or its
-  round backstop).
+  round backstop). E2E: the changed flow works end-to-end, or the step was
+  skipped with a stated reason.
