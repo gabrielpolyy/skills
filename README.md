@@ -15,17 +15,6 @@ right after implementing something.
 
 **Requires** the [`codex`](https://github.com/openai/codex) CLI on your `PATH`.
 
-### [`codex-implement`](./codex-implement)
-
-The inverse division of labor: Claude plans and reviews, `codex` writes the code.
-Claude hands codex a concrete spec (`codex exec`, in a workspace-write sandbox — no
-network, no commits), reviews the resulting diff itself, and loops valid findings
-back through codex as fix rounds until nothing valid remains.
-
-Invoke with `/codex-implement`, typically as "plan X, then /codex-implement".
-
-**Requires** the [`codex`](https://github.com/openai/codex) CLI on your `PATH`.
-
 ### [`sde`](./sde)
 
 The full pipeline in one command: the main-loop model (e.g. Fable) plans and writes
