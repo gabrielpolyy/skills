@@ -12,7 +12,9 @@ One command that runs a whole engineering loop with a division of labor:
    writes a near-final spec. All design judgment happens here.
 2. **Build** — an **Opus** subagent implements the spec and runs the tests.
 3. **Review** — the planner model reads the actual diff, checks it against the
-   spec, and loops real findings back to the same subagent until clean.
+   spec, and loops real findings back to the same subagent until clean. This
+   review should be done by **Fable** even when the main loop runs on another
+   model (see step 3).
 4. **External review** — invoke the **`codex-review` skill** for an independent
    second opinion, then triage/fix its findings per that skill's own loop.
 5. **E2E verify (when possible and needed)** — if the change is user-facing and
@@ -63,8 +65,25 @@ Agent(subagent_type: "general-purpose", model: "opus", run_in_background: false,
 
 (If your main loop is already Opus, drop the builder to `model: "sonnet"`.)
 
-### 3. Review (your model, main thread)
+### 3. Review (Fable — forced, even if not your session model)
 
+- **Force Fable for this review.** If your main-loop model is already Fable,
+  review in the main thread as below. If it is anything else (Opus, Sonnet, …),
+  do not review with your own model — spawn a Fable review subagent:
+
+  ```
+  Agent(subagent_type: "general-purpose", model: "fable", run_in_background: false,
+        description: "Design-review diff vs spec",
+        prompt: "Read the spec at <abs path>/spec.md, then read the actual diff
+                 (`git diff` in <repo>) — every changed file. Review for
+                 correctness and spec conformance; report each real finding with
+                 file:line and why it matters. Report findings only — change
+                 nothing.")
+  ```
+
+  You still triage its findings and drive the fix loop from the main thread. If
+  the `fable` model is unavailable (the Agent call errors), fall back to
+  reviewing inline with your own model and say so in the final report.
 - Read the actual diff of every changed file — do not trust the subagent's summary.
 - Check it against the spec and for correctness. Review inline yourself — do not
   use the `code-review` skill.
