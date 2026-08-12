@@ -97,6 +97,11 @@ The prompt also forbids edits as a second layer.
   `NO_CHANGES` only fires when every listed repo is clean.
 - Each codex round is a real external call (costs tokens, takes ~1–several minutes). That's
   why this is manual, not a hook — invoke it when you actually want the review.
+- The script pins the reviewer to the Sol model at HIGH reasoning effort
+  (`codex exec -m gpt-5.6-sol -c model_reasoning_effort="high"`), so the review never
+  depends on whatever model/effort `~/.codex/config.toml` currently holds (the ChatGPT
+  app's picker rewrites that file). Override via `CODEX_REVIEW_MODEL` / `CODEX_REVIEW_EFFORT`
+  only if the user explicitly asks.
 - To test the plumbing without calling codex (prints the prompt that would be sent):
   `CODEX_REVIEW_DRY_RUN=1 bash ~/.claude/skills/codex-review/review.sh "test scope"`.
   A scope arg is still required; dry-run runs before the no-changes guard, so it previews the

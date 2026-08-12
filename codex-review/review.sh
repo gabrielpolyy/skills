@@ -21,8 +21,16 @@
 # Output: codex's findings, or the literal token NO_FINDINGS / NO_CHANGES / NOT_A_GIT_REPO,
 #         or a line starting with CODEX_ERROR: / WARNING:.
 # Env:    CODEX_REVIEW_DRY_RUN=1  -> print the prompt that would be sent, skip the codex call.
+#         CODEX_REVIEW_MODEL / CODEX_REVIEW_EFFORT -> override the pinned model/effort
+#         (default: gpt-5.6-sol / high).
 
 set -uo pipefail
+
+# Pin the reviewer model + reasoning effort. NEVER rely on ~/.codex/config.toml
+# defaults — the ChatGPT app's model picker rewrites them, so an unpinned run
+# could silently review with a weaker model/effort.
+CODEX_REVIEW_MODEL="${CODEX_REVIEW_MODEL:-gpt-5.6-sol}"
+CODEX_REVIEW_EFFORT="${CODEX_REVIEW_EFFORT:-high}"
 
 # The scope argument is required — it defines what codex reviews. Fail fast on a
 # missing or blank scope rather than running a vague review.
@@ -123,7 +131,7 @@ EOF
 if [ "${CODEX_REVIEW_DRY_RUN:-0}" = "1" ]; then
   # Dry-run previews the prompt for testing; it deliberately runs BEFORE the
   # no-changes guard so the prompt is shown even in a clean tree.
-  echo "DRY_RUN: would run (cwd=${repos[0]}): codex exec --sandbox read-only -o <tmp> \"<prompt below>\""
+  echo "DRY_RUN: would run (cwd=${repos[0]}): codex exec --sandbox read-only -m $CODEX_REVIEW_MODEL -c model_reasoning_effort=$CODEX_REVIEW_EFFORT -o <tmp> \"<prompt below>\""
   echo "----- repos -----"
   printf '%s\n' "${repos[@]}"
   echo "----- prompt -----"
@@ -188,10 +196,14 @@ cd "${repos[0]}" || { echo "CODEX_ERROR: cannot cd to ${repos[0]}"; exit 1; }
 before="$(snapshot)"
 # --sandbox read-only: codex can read the repos to review, but cannot write, edit,
 # or change git state — a hard guarantee, not just a prompt instruction.
+# -m/-c pin the reviewer to Sol at HIGH reasoning effort: the review must not
+# silently run on whatever model/effort ~/.codex/config.toml happens to hold
+# (the ChatGPT app's model picker rewrites that config).
 # </dev/null: the prompt is passed as an argument, so codex must not also try to read
 # stdin — with a non-EOF stdin (e.g. a background/piped invocation) it would block
 # "Reading additional input from stdin..." or append unintended input to the prompt.
-codex exec --sandbox read-only -o "$out" "$prompt" </dev/null >"$log" 2>&1
+codex exec --sandbox read-only -m "$CODEX_REVIEW_MODEL" -c model_reasoning_effort="$CODEX_REVIEW_EFFORT" \
+  -o "$out" "$prompt" </dev/null >"$log" 2>&1
 rc=$?
 if [ "$rc" -ne 0 ]; then
   echo "CODEX_ERROR: codex exec exited $rc. Last log lines:"
