@@ -9,12 +9,14 @@ user-invocable: true
 One command that runs a whole engineering loop with a division of labor:
 
 1. **Plan** — your current (main-loop) model, typically Fable, reads the code and
-   writes a near-final spec. All design judgment happens here.
+   writes a near-final spec. All design judgment happens here. If the main loop
+   isn't Fable, the spec then gets a **Fable design review** before any code is
+   written (see step 1).
 2. **Build** — an **Opus** subagent implements the spec and runs the tests.
-3. **Review** — the planner model reads the actual diff, checks it against the
-   spec, and loops real findings back to the same subagent until clean. This
-   review should be done by **Fable** even when the main loop runs on another
-   model (see step 3).
+3. **Implementation review** — Fable reads the actual diff, checks that it
+   respects the proposed design in the spec, and loops real findings back to
+   the builder until clean — forced to **Fable** even when the main loop runs
+   on another model (see step 3).
 4. **External review** — invoke the **`codex-review` skill** for an independent
    second opinion, then triage/fix its findings per that skill's own loop.
 5. **E2E verify (when possible and needed)** — if the change is user-facing and
@@ -46,6 +48,12 @@ skipped and why.
   - **Guardrails** — match existing style; surgical changes only; touch nothing
     outside the listed files; no drive-by refactors.
   - **Definition of done** — tests green, and the specific behaviors that must hold.
+- **Fable design review (when your model isn't Fable).** Before launching the
+  build, spawn a Fable subagent to review the design itself (same
+  `Agent(... model: "fable" ...)` pattern as step 3, report-only): it reads
+  `spec.md` and the code it references, challenges the approach, and reports
+  amendments. Fold the real ones into `spec.md`. The build then implements a
+  Fable-endorsed design, and step 3 verifies the implementation respects it.
 - Too small to spec (a one-liner, a rename)? Say so, do it inline, and jump
   straight to step 4.
 
@@ -65,7 +73,7 @@ Agent(subagent_type: "general-purpose", model: "opus", run_in_background: false,
 
 (If your main loop is already Opus, drop the builder to `model: "sonnet"`.)
 
-### 3. Review (Fable — forced, even if not your session model)
+### 3. Implementation review (Fable — forced, even if not your session model)
 
 - **Force Fable for this review.** If your main-loop model is already Fable,
   review in the main thread as below. If it is anything else (Opus, Sonnet, …),
@@ -73,17 +81,21 @@ Agent(subagent_type: "general-purpose", model: "opus", run_in_background: false,
 
   ```
   Agent(subagent_type: "general-purpose", model: "fable", run_in_background: false,
-        description: "Design-review diff vs spec",
+        name: "sde-reviewer", description: "Review implementation vs design",
         prompt: "Read the spec at <abs path>/spec.md, then read the actual diff
                  (`git diff` in <repo>) — every changed file. Review for
-                 correctness and spec conformance; report each real finding with
-                 file:line and why it matters. Report findings only — change
-                 nothing.")
+                 correctness and for whether the implementation respects the
+                 spec's design; report each real finding with file:line and why
+                 it matters. Report findings only — change nothing.")
   ```
 
-  You still triage its findings and drive the fix loop from the main thread. If
-  the `fable` model is unavailable (the Agent call errors), fall back to
-  reviewing inline with your own model and say so in the final report.
+  You still triage its findings and drive the fix loop from the main thread.
+  After the builder applies fixes, send the updated diff back to the **same**
+  Fable reviewer (`SendMessage` to `sde-reviewer` — its context is intact) so
+  Fable confirms the implementation now respects the design; repeat until it
+  reports clean. If the `fable` model is unavailable (the Agent call errors),
+  fall back to reviewing inline with your own model and say so in the final
+  report.
 - Read the actual diff of every changed file — do not trust the subagent's summary.
 - Check it against the spec and for correctness. Review inline yourself — do not
   use the `code-review` skill.
