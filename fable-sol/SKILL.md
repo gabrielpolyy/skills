@@ -1,10 +1,10 @@
 ---
-name: sde-fable-codex
-description: Software-development-engineer pipeline with Fable designing and codex building — Fable (the main loop) plans and writes a near-final spec, the codex-implement skill (codex exec, workspace-write sandbox) implements it, Fable reviews the builder's delta against the spec (the pipeline's cross-model review), the codex-review skill (Sol) runs the external review pass and its findings are triaged and fixed until clean, and if the change is user-facing and the project has an e2e harness (e.g. a browser-e2e skill) an Opus subagent verifies the changed flow in the running app. Use when the user types /sde-fable-codex with a task ("do this /sde-fable-codex", "/sde-fable-codex add X"), or asks for the Fable-designs, codex-implements pipeline in one shot.
+name: fable-sol
+description: Software-development-engineer pipeline with Fable designing and codex building — Fable (the main loop) plans and writes a near-final spec, the codex-implement skill (codex exec, workspace-write sandbox) implements it, Fable reviews the builder's delta against the spec (the pipeline's cross-model review), the codex-review skill (Sol) runs the external review pass and its findings are triaged and fixed until clean, and if the change is user-facing and the project has an e2e harness (e.g. a browser-e2e skill) an Opus subagent verifies the changed flow in the running app. Use when the user types /fable-sol with a task ("do this /fable-sol", "/fable-sol add X"), or asks for the Fable-designs, codex-implements pipeline in one shot.
 user-invocable: true
 ---
 
-# Skill: sde-fable-codex (Fable designs, codex implements)
+# Skill: fable-sol (Fable designs, codex implements)
 
 One command, a fixed division of labor:
 

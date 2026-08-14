@@ -42,7 +42,7 @@ Invoke with `/sde-fable-opus-sol <task>`, e.g. "add retry logic to the uploader
 [`codex`](https://github.com/openai/codex) CLI on your `PATH` for the final review
 step.
 
-### [`sde-fable-codex`](./sde-fable-codex)
+### [`fable-sol`](./fable-sol)
 
 The pipeline with the roles swapped at the build step — Fable designs, codex
 implements: Fable (the main loop) plans and writes the near-final spec, the
@@ -52,7 +52,7 @@ also runs the external `codex-review` pass), and an Opus subagent verifies
 user-facing changes end-to-end in the running app. Refuses to run if the session
 model isn't Fable.
 
-Invoke with `/sde-fable-codex <task>`.
+Invoke with `/fable-sol <task>`.
 
 **Requires** the [`codex-implement`](./codex-implement) and
 [`codex-review`](./codex-review) skills (this repo) and the
