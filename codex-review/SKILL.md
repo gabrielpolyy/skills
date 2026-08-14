@@ -33,7 +33,10 @@ The prompt also forbids edits as a second layer.
    ```
 
    The script runs from anywhere (it cd's to the repo root) and codex diffs the working tree
-   itself — your summary tells it which of those changes are in scope and why.
+   itself — your summary tells it which of those changes are in scope and why. `review.sh`
+   lives next to this SKILL.md — adjust the path if the skill is installed somewhere other
+   than `~/.claude/skills`. A Sol/high round often takes several minutes, so pass a generous
+   Bash-tool `timeout` (e.g. 600000 ms) — the default 2 minutes can kill a round mid-review.
 
    **Cross-repo changes.** When this session's work spans more than one repo (e.g. you changed an
    API/contract/shared type in one repo and its consumer in another), pass each repo path as an

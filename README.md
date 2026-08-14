@@ -28,6 +28,20 @@ Invoke with `/sde <task>`, e.g. "add retry logic to the uploader /sde".
 [`codex`](https://github.com/openai/codex) CLI on your `PATH` for the final review
 step.
 
+### [`sde-opus-sol`](./sde-opus-sol)
+
+The same pipeline on a fixed model budget — no Fable anywhere: Opus plans and
+writes the spec (an Opus subagent design-reviews it when the main loop runs
+cheaper), an Opus subagent implements it, the `codex-review` skill (Sol at high
+reasoning effort) is the pipeline's code reviewer, and an Opus subagent verifies
+user-facing changes end-to-end in the running app.
+
+Invoke with `/sde-opus-sol <task>`.
+
+**Requires** the [`codex-review`](./codex-review) skill (this repo) and the
+[`codex`](https://github.com/openai/codex) CLI on your `PATH` — codex is the
+only code reviewer in this variant.
+
 ## Installing a skill
 
 Copy (or symlink) a skill directory into your Claude Code skills folder:
