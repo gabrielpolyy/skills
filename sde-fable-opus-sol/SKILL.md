@@ -1,34 +1,28 @@
 ---
-name: sde-opus-sol
-description: Software-development-engineer pipeline without Fable — Opus does the thinking, codex (Sol) does the reviewing. Opus (the main loop) plans and writes a near-final spec, an Opus subagent implements it, the planner checks the builder's delta against the spec, the codex-review skill (pinned to Sol at high reasoning effort) runs the pipeline's code review and its findings are triaged and fixed until clean, and if the change is user-facing and the project has an e2e harness (e.g. a browser-e2e skill) an Opus subagent verifies the changed flow in the running app. Use when the user types /sde-opus-sol with a task ("do this /sde-opus-sol", "/sde-opus-sol add X"), or asks for the sde pipeline on Opus and codex only (no Fable).
+name: sde-fable-opus-sol
+description: Software-development-engineer pipeline with a fixed division of labor — Fable (the main loop) plans and writes a near-final spec, an Opus subagent implements it, Fable checks the builder's delta against the spec, the codex-review skill (Sol) runs the external code review and its findings are triaged and fixed until clean, and if the change is user-facing and the project has an e2e harness (e.g. a browser-e2e skill) an Opus subagent verifies the changed flow in the running app. Use when the user types /sde-fable-opus-sol with a task ("do this /sde-fable-opus-sol", "/sde-fable-opus-sol add X"), or asks for the Fable-plans, Opus-builds, codex-reviews pipeline in one shot.
 user-invocable: true
 ---
 
-# Skill: sde-opus-sol (plan and build with Opus, review with Sol)
+# Skill: sde-fable-opus-sol (Fable plans, Opus builds, Sol reviews)
 
-The `sde-fable-opus-sol` engineering loop on a fixed model budget: **Opus and
-codex's Sol model only — Fable is never spawned.** ("Sol" is the reviewer the
-`codex-review` skill pins: `gpt-5.6-sol` at high reasoning effort.)
+One command, four roles:
 
-1. **Plan** — Opus (the main loop) reads the code and writes a near-final spec.
+1. **Plan** — Fable (the main loop) reads the code and writes a near-final spec.
 2. **Build** — an Opus subagent implements the spec and runs the tests.
-3. **Review** — the planner checks the builder's delta against the spec, then
-   the `codex-review` skill runs the pipeline's code review — not a second
-   opinion, *the* review; the planner triages and drives fixes until codex is
-   clean.
+3. **Review** — Fable checks the builder's delta against the spec, then the
+   `codex-review` skill runs an independent external review; Fable triages and
+   drives fixes until codex is clean.
 4. **E2E** — if the change is user-facing and the project has an e2e harness,
    an Opus subagent verifies the changed flow in the running app.
 
-**This skill assumes the main loop is Opus.** If it isn't, stop and tell the
-user to switch (`/model`) — or, if they're on Fable, that `/sde-fable-opus-sol`
-is the pipeline for that model. Don't plan on a cheaper model, and don't spend
-Fable on a pipeline built to avoid it.
+**This skill assumes the main loop is Fable.** If it isn't, stop and tell the
+user to switch (`/model`) or run `/sde-opus-sol` instead — don't emulate the
+pipeline on a cheaper model.
 
 **Requires:** the `codex-review` skill installed (same repo) and the `codex`
-CLI on `PATH`. Codex is the only code reviewer here — if either is missing,
-stop after step 3, tell the user the review gate could not run, and suggest
-installing codex or running `/sde-fable-opus-sol` instead. Never present the
-result as "reviewed" without it.
+CLI on `PATH`. If either is missing, run the other steps and tell the user the
+codex review was skipped and why.
 
 ## Workflow
 
@@ -77,12 +71,10 @@ Agent(subagent_type: "general-purpose", model: "opus", run_in_background: false,
                fix, the test output, and any deviation from the spec and why.")
 ```
 
-The builder is a separate subagent even though the main loop is already Opus —
-a separate builder context keeps the planner's context clean for review.
-
 ### 3. Spec check (main thread)
 
-Look at the work before handing it to codex:
+Not a formal review stage — you are Fable; just look at the work before handing
+it to codex:
 
 - **Scope to the builder's delta — never bare `git diff`** (it mixes in
   pre-existing uncommitted work and misses files the builder *created*). Read
@@ -94,7 +86,7 @@ Look at the work before handing it to codex:
 - Misses go back to the **same** builder via `SendMessage` (its context is
   intact); repeat until clean. If the builder had to guess, tighten the spec.
 
-### 4. Code review (codex-review skill — the pipeline's reviewer)
+### 4. External review (codex-review skill)
 
 Invoke the `codex-review` skill via the Skill tool and follow **its** loop:
 pass a session-scope summary built from the builder's file lists, read the
@@ -102,11 +94,7 @@ findings, triage them yourself, fix the valid ones, re-review until codex is
 clean or nothing new and valid remains. This command is the user's explicit
 request for that review — don't ask again.
 
-This is the pipeline's only code review, so don't soft-pedal the loop: run it
-to a genuine stop condition (clean, no new valid findings, or the skill's
-round backstop), never "one round was probably enough".
-
-### 5. E2E verification (Opus subagent, when possible and needed)
+### 5. E2E verification (when possible and needed)
 
 Run only when **both** hold:
 
@@ -135,11 +123,8 @@ why skipped), and any spec deviation you accepted.
 
 ## Guardrails
 
-- **No Fable.** This pipeline never spawns a subagent above Opus; the
-  independent quality gate is codex. If the user wants Fable gates, that's
-  `/sde-fable-opus-sol`.
-- **The planner owns correctness.** Codex reviews the code, but the spec check
-  in step 3 always happens — an unread diff never ships.
+- **You own correctness.** Codex is a second opinion, not the safety net — the
+  spec check in step 3 always happens.
 - **Fixes bypass earlier verdicts.** Code changed after codex's last clean
   verdict gets one more codex round (step 5).
 - **Stop conditions.** Build loop: delta matches spec, tests green. Codex loop:
