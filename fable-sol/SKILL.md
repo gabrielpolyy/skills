@@ -24,7 +24,7 @@ whole point; don't emulate the pipeline on a cheaper model.
 
 **Requires:** the `codex-implement` and `codex-review` skills (same repo) and
 the `codex` CLI on `PATH`. Codex is the builder here — if the CLI is missing
-there is no pipeline; stop and suggest `/sde-fable-opus-sol` instead.
+there is no pipeline; stop and tell the user to install it.
 
 ## Workflow
 

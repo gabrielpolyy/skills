@@ -26,22 +26,6 @@ Invoke with `/codex-implement <task>`, or ask Claude to "have codex implement th
 
 **Requires** the [`codex`](https://github.com/openai/codex) CLI on your `PATH`.
 
-### [`sde-fable-opus-sol`](./sde-fable-opus-sol)
-
-The full pipeline in one command: Fable (the main loop) plans and writes a
-near-final spec, an Opus subagent implements it, Fable checks the delta against
-the spec, the `codex-review` skill runs an external second-opinion review whose
-findings get triaged and fixed until clean, and an Opus subagent verifies
-user-facing changes end-to-end in the running app. Refuses to run if the
-session model isn't Fable (use `sde-opus-sol` instead).
-
-Invoke with `/sde-fable-opus-sol <task>`, e.g. "add retry logic to the uploader
-/sde-fable-opus-sol".
-
-**Requires** the [`codex-review`](./codex-review) skill (this repo) and the
-[`codex`](https://github.com/openai/codex) CLI on your `PATH` for the final review
-step.
-
 ### [`fable-sol`](./fable-sol)
 
 The pipeline with the roles swapped at the build step — Fable designs, codex
@@ -58,20 +42,6 @@ Invoke with `/fable-sol <task>`.
 [`codex-review`](./codex-review) skills (this repo) and the
 [`codex`](https://github.com/openai/codex) CLI on your `PATH` — codex is the builder
 in this variant.
-
-### [`sde-opus-sol`](./sde-opus-sol)
-
-The same pipeline on a fixed model budget — no Fable anywhere: Opus (the main
-loop) plans and writes the spec, an Opus subagent implements it, the
-`codex-review` skill (Sol at high reasoning effort) is the pipeline's code
-reviewer, and an Opus subagent verifies user-facing changes end-to-end in the
-running app. Refuses to run if the session model isn't Opus.
-
-Invoke with `/sde-opus-sol <task>`.
-
-**Requires** the [`codex-review`](./codex-review) skill (this repo) and the
-[`codex`](https://github.com/openai/codex) CLI on your `PATH` — codex is the
-only code reviewer in this variant.
 
 ## Installing a skill
 
