@@ -26,7 +26,7 @@ Invoke with `/codex-implement <task>`, or ask Claude to "have codex implement th
 
 **Requires** the [`codex`](https://github.com/openai/codex) CLI on your `PATH`.
 
-### [`fable-sol`](./fable-sol)
+### [`fable-codex`](./fable-codex)
 
 The pipeline with the roles swapped at the build step — Fable designs, codex
 implements: Fable (the main loop) plans and writes the near-final spec, the
@@ -36,7 +36,7 @@ also runs the external `codex-review` pass), and an Opus subagent verifies
 user-facing changes end-to-end in the running app. Refuses to run if the session
 model isn't Fable.
 
-Invoke with `/fable-sol <task>`.
+Invoke with `/fable-codex <task>`.
 
 **Requires** the [`codex-implement`](./codex-implement) and
 [`codex-review`](./codex-review) skills (this repo) and the

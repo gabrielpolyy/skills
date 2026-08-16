@@ -9,7 +9,7 @@
 # the file itself can live anywhere (e.g. the scratchpad) and codex never
 # depends on reading a path outside the repo.
 #
-# Used by the global `codex-implement` skill (and the fable-sol pipeline).
+# Used by the global `codex-implement` skill (and the fable-codex pipeline).
 #
 # Usage:  implement.sh <spec-file> [repo]
 #           - arg 1 (REQUIRED): existing, non-empty file holding the spec/brief.

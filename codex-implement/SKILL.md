@@ -1,6 +1,6 @@
 ---
 name: codex-implement
-description: Delegate an implementation to an external builder — codex exec, in a workspace-write sandbox, implements a self-contained spec in the current repo, runs the tests, and reports back; you then verify the delta yourself. Use when the user types /codex-implement with a task, or asks to have codex implement or build something ("have codex implement this", "let codex build X"). Also the build step of the fable-sol pipeline.
+description: Delegate an implementation to an external builder — codex exec, in a workspace-write sandbox, implements a self-contained spec in the current repo, runs the tests, and reports back; you then verify the delta yourself. Use when the user types /codex-implement with a task, or asks to have codex implement or build something ("have codex implement this", "let codex build X"). Also the build step of the fable-codex pipeline.
 user-invocable: true
 ---
 
