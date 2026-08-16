@@ -43,6 +43,20 @@ Invoke with `/fable-codex <task>`.
 [`codex`](https://github.com/openai/codex) CLI on your `PATH` — codex is the builder
 in this variant.
 
+### [`opus-codex`](./opus-codex)
+
+The same pipeline on a fixed model budget — no Fable anywhere: Opus (the main
+loop) plans and writes the spec, an Opus subagent implements it, the
+`codex-review` skill (Sol at high reasoning effort) is the pipeline's code
+reviewer, and an Opus subagent verifies user-facing changes end-to-end in the
+running app. Refuses to run if the session model isn't Opus.
+
+Invoke with `/opus-codex <task>`.
+
+**Requires** the [`codex-review`](./codex-review) skill (this repo) and the
+[`codex`](https://github.com/openai/codex) CLI on your `PATH` — codex is the
+only code reviewer in this variant.
+
 ## Installing a skill
 
 Copy (or symlink) a skill directory into your Claude Code skills folder:
