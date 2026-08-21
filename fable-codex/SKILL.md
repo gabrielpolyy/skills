@@ -139,10 +139,15 @@ pipeline stopped early (say why in the message). Source
 
 ```bash
 [ -f ~/.config/telegram-notify/env ] && . ~/.config/telegram-notify/env && \
+printf '%s' "✅ /fable-codex done in <repo>: <task> — tests <status>, review <status>" | \
 curl -sS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
   -d chat_id="${TELEGRAM_CHAT_ID}" \
-  --data-urlencode text="✅ /fable-codex done in <repo>: <task> — tests <status>, review <status>"
+  --data-urlencode text@-
 ```
+
+The text goes through stdin (`text@-`), not an argument: on Windows, Git Bash
+mangles non-ASCII argv when spawning native curl.exe (Telegram rejects it with
+"strings must be encoded in UTF-8"), while a pipe carries raw UTF-8 intact.
 
 If the config file is missing, skip silently. If the send fails, mention it in
 the report — never let notification failure affect the pipeline's result.
