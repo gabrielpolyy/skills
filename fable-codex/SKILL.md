@@ -130,6 +130,23 @@ deviation the builder flagged or you accepted, what codex-review flagged and
 what you fixed vs. skipped (one-line reasons), and the e2e outcome (or why
 skipped).
 
+### 7. Notify (Telegram)
+
+After the report, tell the user's Telegram the run is over — also when the
+pipeline stopped early (say why in the message). Source
+`~/.config/telegram-notify/env` (it defines `TELEGRAM_BOT_TOKEN` and
+`TELEGRAM_CHAT_ID`) and send a one-line summary:
+
+```bash
+[ -f ~/.config/telegram-notify/env ] && . ~/.config/telegram-notify/env && \
+curl -sS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+  -d chat_id="${TELEGRAM_CHAT_ID}" \
+  --data-urlencode text="✅ /fable-codex done in <repo>: <task> — tests <status>, review <status>"
+```
+
+If the config file is missing, skip silently. If the send fails, mention it in
+the report — never let notification failure affect the pipeline's result.
+
 ## Guardrails
 
 - **You own correctness.** Codex builds and codex reviews — your step-3 read is

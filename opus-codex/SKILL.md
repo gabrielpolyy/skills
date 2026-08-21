@@ -132,6 +132,23 @@ Then summarize: what shipped (files + behavior), test status, what codex
 flagged and what you fixed vs. skipped (one-line reasons), the e2e outcome (or
 why skipped), and any spec deviation you accepted.
 
+### 7. Notify (Telegram)
+
+After the report, tell the user's Telegram the run is over — also when the
+pipeline stopped early (say why in the message). Source
+`~/.config/telegram-notify/env` (it defines `TELEGRAM_BOT_TOKEN` and
+`TELEGRAM_CHAT_ID`) and send a one-line summary:
+
+```bash
+[ -f ~/.config/telegram-notify/env ] && . ~/.config/telegram-notify/env && \
+curl -sS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+  -d chat_id="${TELEGRAM_CHAT_ID}" \
+  --data-urlencode text="✅ /opus-codex done in <repo>: <task> — tests <status>, review <status>"
+```
+
+If the config file is missing, skip silently. If the send fails, mention it in
+the report — never let notification failure affect the pipeline's result.
+
 ## Guardrails
 
 - **No Fable.** This pipeline never spawns a subagent above Opus; the
