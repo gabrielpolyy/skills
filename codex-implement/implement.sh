@@ -19,7 +19,7 @@
 #         lines (codex committed / the run changed nothing).
 # Env:    CODEX_IMPLEMENT_DRY_RUN=1  -> print the prompt that would be sent, skip the codex call.
 #         CODEX_IMPLEMENT_MODEL / CODEX_IMPLEMENT_EFFORT -> override the pinned
-#         model/effort (default: gpt-5.6-sol / high).
+#         model/effort (defaults: the two assignments below — the only place the model id lives).
 
 set -uo pipefail
 
@@ -83,7 +83,7 @@ EOF
 
 if [ "${CODEX_IMPLEMENT_DRY_RUN:-0}" = "1" ]; then
   # Dry-run previews the prompt for testing the plumbing without a codex call.
-  echo "DRY_RUN: would run (cwd=${root}): codex exec --sandbox workspace-write -m $CODEX_IMPLEMENT_MODEL -c model_reasoning_effort=$CODEX_IMPLEMENT_EFFORT -o <tmp> \"<prompt below>\""
+  echo "DRY_RUN: would run (cwd=${root}): codex exec --sandbox workspace-write -m $CODEX_IMPLEMENT_MODEL -c model_reasoning_effort=$CODEX_IMPLEMENT_EFFORT -o <tmp> - <<<\"<prompt below>\""
   echo "----- prompt -----"
   printf '%s\n' "$prompt"
   exit 0
@@ -112,9 +112,14 @@ snapshot() {
   } | hash_cmd | awk '{print $1}'
 }
 
-out=""; log=""
+out=""; log=""; codex_pid=""
 cleanup() { rm -f -- "${out:-}" "${log:-}" 2>/dev/null || true; }
 trap cleanup EXIT
+# If THIS script is killed (e.g. the caller's timeout fires), take codex down with
+# it — an orphaned builder would keep editing the working tree after the caller
+# has already given up on the run.
+on_signal() { [ -n "$codex_pid" ] && kill "$codex_pid" 2>/dev/null; exit 143; }
+trap on_signal TERM INT HUP
 out="$(mktemp)"; log="$(mktemp)"
 
 # Run from the repo root: workspace-write grants write access to codex's cwd.
@@ -125,11 +130,14 @@ head_before="$(git rev-parse --verify -q HEAD 2>/dev/null || echo NONE)"
 # --sandbox workspace-write: codex can edit files in this repo and run the tests,
 # but cannot write outside it, reach the network, or (per the prompt) commit.
 # -m/-c pin the builder to Sol at HIGH reasoning effort — see the note above.
-# </dev/null: the prompt is passed as an argument, so codex must not also try to
-# read stdin — with a non-EOF stdin it would block or append unintended input.
-codex exec --sandbox workspace-write -m "$CODEX_IMPLEMENT_MODEL" -c model_reasoning_effort="$CODEX_IMPLEMENT_EFFORT" \
-  -o "$out" "$prompt" </dev/null >"$log" 2>&1
-rc=$?
+# The prompt goes in via stdin (`-`), not argv: a near-final-code spec can exceed
+# Linux's per-argument size cap, and Git Bash on Windows mangles non-ASCII argv
+# when spawning a native exe, while a pipe carries raw UTF-8 intact.
+printf '%s' "$prompt" | codex exec --sandbox workspace-write -m "$CODEX_IMPLEMENT_MODEL" \
+  -c model_reasoning_effort="$CODEX_IMPLEMENT_EFFORT" -o "$out" - >"$log" 2>&1 &
+codex_pid=$!
+wait "$codex_pid"; rc=$?
+codex_pid=""
 if [ "$rc" -ne 0 ]; then
   echo "CODEX_ERROR: codex exec exited $rc. Last log lines:"
   tail -n 25 "$log"

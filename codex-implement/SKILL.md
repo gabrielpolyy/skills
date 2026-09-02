@@ -49,6 +49,11 @@ the prompt, so the file can live outside the repo (scratchpad).
    somewhere other than `~/.claude/skills`. An optional second argument names the repo to work
    in when it isn't the current directory.
 
+   600000 ms is the Bash tool's hard maximum. If a build could plausibly run longer (a large
+   spec, many test cycles), run the command with `run_in_background: true` instead and wait for
+   its completion notification — a foreground timeout kills the script, and the script then
+   kills codex with it, so the build is simply lost.
+
    - Output `NOT_A_GIT_REPO` → the current dir isn't a git repo and no repo arg was passed.
    - Exit code 2 / `usage:` → the spec-file argument is missing or the file is empty. Write
      the brief first; it's required.
@@ -76,11 +81,13 @@ the prompt, so the file can live outside the repo (scratchpad).
 
 ## Notes
 
-- The script pins the builder to the Sol model at HIGH reasoning effort
-  (`codex exec -m gpt-5.6-sol -c model_reasoning_effort="high"`) for the same reason
-  `codex-review` pins its reviewer: the ChatGPT app's model picker rewrites
-  `~/.codex/config.toml`, so an unpinned run could silently build with a weaker model.
-  Override via `CODEX_IMPLEMENT_MODEL` / `CODEX_IMPLEMENT_EFFORT` only if the user asks.
+- The script pins the builder to the Sol model at HIGH reasoning effort (the exact model id
+  lives only at the top of `implement.sh`) for the same reason `codex-review` pins its
+  reviewer: the ChatGPT app's model picker rewrites `~/.codex/config.toml`, so an unpinned run
+  could silently build with a weaker model. Override via `CODEX_IMPLEMENT_MODEL` /
+  `CODEX_IMPLEMENT_EFFORT` only if the user asks.
+- The spec goes to codex through stdin, so its size isn't limited by the shell's argument
+  cap and non-ASCII text survives on Windows Git Bash.
 - Each run is a real external call (costs tokens, takes minutes). Prefer one good brief over
   many small rounds.
 - To test the plumbing without calling codex (prints the prompt that would be sent):

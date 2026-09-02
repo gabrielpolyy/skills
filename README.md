@@ -11,7 +11,8 @@ in the current session, then triage and fix the valid findings — iterating unt
 is clean or the only remaining findings aren't worth acting on.
 
 Invoke with `/codex-review`, or ask Claude to "review the current changes with codex"
-right after implementing something.
+right after implementing something. `review.sh --paths "<files>"` restricts the diff to
+the files the session touched; the pipelines below always pass it.
 
 **Requires** the [`codex`](https://github.com/openai/codex) CLI on your `PATH`.
 
@@ -70,6 +71,16 @@ ln -s "$PWD/codex-review" /path/to/project/.claude/skills/codex-review
 ```
 
 Restart Claude Code (or start a new session) so it picks up the skill.
+
+## Tests
+
+The scripts' guards (argument handling, no-changes short-circuit, `--paths`, multi-repo,
+no-HEAD repos, output passthrough, and killing codex when the script is killed) are covered
+by a plain-bash suite that swaps in a fake `codex`, so it never calls the real CLI:
+
+```sh
+bash tests/test.sh
+```
 
 ## License
 

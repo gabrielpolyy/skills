@@ -8,7 +8,8 @@ user-invocable: true
 
 The engineering loop on a fixed model budget: **Opus and codex's Sol model
 only — Fable is never spawned.** ("Sol" is the reviewer the `codex-review`
-skill pins: `gpt-5.6-sol` at high reasoning effort.)
+skill pins, at high reasoning effort; the exact model id lives only at the top
+of that skill's `review.sh`.)
 
 1. **Plan** — Opus (the main loop) reads the code and writes a near-final spec.
 2. **Build** — an Opus subagent implements the spec and runs the tests.
@@ -59,6 +60,7 @@ and every later step must be scoped to the builder's changes only:
 
 ```
 git status --porcelain > <scratchpad>/baseline.txt
+git rev-parse HEAD > <scratchpad>/head.txt
 ```
 
 Then launch one subagent, synchronous, with the spec path:
@@ -68,6 +70,9 @@ Agent(subagent_type: "general-purpose", model: "opus", run_in_background: false,
       description: "Implement <thing> per spec",
       prompt: "Implement exactly the spec at <abs path>/spec.md. Work only in
                <repo>. Touch only the files it lists; make no other changes.
+               Do NOT commit, stash, or otherwise change git state — leave
+               every change uncommitted in the working tree; the uncommitted
+               diff is what gets reviewed next.
                If the spec marks the task as a bug fix, write the regression
                test first, run it, and capture its FAILING output before
                applying the production change. When done, run <test command>
@@ -88,18 +93,25 @@ Look at the work before handing it to codex:
   `git diff -- <modified files>` plus every created file in full. Cross-check
   the builder's lists against `git status --porcelain` vs `baseline.txt` — any
   unlisted change is a stray edit to chase down.
+- Confirm `git rev-parse HEAD` still matches `head.txt`. A builder that
+  committed has hidden its delta from the review: `git reset --soft <that
+  hash>` to undo, then continue as uncommitted work.
 - Check the delta matches the spec's design. For a bug fix, confirm the test
   went red before the fix. Re-run the test command yourself.
 - Misses go back to the **same** builder via `SendMessage` (its context is
   intact); repeat until clean. If the builder had to guess, tighten the spec.
+- Keep the list of files the builder touched (created + modified, from the
+  baseline diff) — step 4 hands it to the reviewer.
 
 ### 4. Code review (codex-review skill — the pipeline's reviewer)
 
 Invoke the `codex-review` skill via the Skill tool and follow **its** loop:
-pass a session-scope summary built from the builder's file lists, read the
-findings, triage them yourself, fix the valid ones, re-review until codex is
-clean or nothing new and valid remains. This command is the user's explicit
-request for that review — don't ask again.
+pass `--paths` with the builder's file list from step 3 (so codex diffs only
+the delta, not whatever else is uncommitted) plus a session-scope summary
+built from the spec, read the findings, triage them yourself, fix the valid
+ones, re-review — carrying the dismissed findings forward in the scope text as
+that skill describes — until codex is clean or nothing new and valid remains.
+This command is the user's explicit request for that review — don't ask again.
 
 This is the pipeline's only code review, so don't soft-pedal the loop: run it
 to a genuine stop condition (clean, no new valid findings, or the skill's
@@ -140,19 +152,25 @@ pipeline stopped early (say why in the message). Source
 `TELEGRAM_CHAT_ID`) and send a one-line summary:
 
 ```bash
-[ -f ~/.config/telegram-notify/env ] && . ~/.config/telegram-notify/env && \
-printf '%s' "✅ /opus-codex done in <repo>: <task> — tests <status>, review <status>" | \
-curl -sS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-  -d chat_id="${TELEGRAM_CHAT_ID}" \
-  --data-urlencode text@-
+if [ -f ~/.config/telegram-notify/env ]; then
+  . ~/.config/telegram-notify/env
+  msg='✅ /opus-codex done in <repo>: <task> — tests <status>, review <status>'
+  printf '%s' "$msg" | curl -fsS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+    -d chat_id="${TELEGRAM_CHAT_ID}" --data-urlencode text@- >/dev/null \
+    && echo TELEGRAM_SENT || echo TELEGRAM_FAILED
+fi
 ```
 
-The text goes through stdin (`text@-`), not an argument: on Windows, Git Bash
-mangles non-ASCII argv when spawning native curl.exe (Telegram rejects it with
-"strings must be encoded in UTF-8"), while a pipe carries raw UTF-8 intact.
+Keep the message in **single quotes** so a task containing `"`, `$` or
+backticks can't break the command (if the task text itself has a single quote,
+drop or replace it). The text goes through stdin (`text@-`), not an argument:
+on Windows, Git Bash mangles non-ASCII argv when spawning native curl.exe
+(Telegram rejects it with "strings must be encoded in UTF-8"), while a pipe
+carries raw UTF-8 intact. `-f` turns an HTTP error into a non-zero exit, which
+is what makes `TELEGRAM_FAILED` reliable — without it curl exits 0 on a 400.
 
-If the config file is missing, skip silently. If the send fails, mention it in
-the report — never let notification failure affect the pipeline's result.
+If the config file is missing, skip silently. On `TELEGRAM_FAILED`, mention it
+in the report — never let notification failure affect the pipeline's result.
 
 ## Guardrails
 

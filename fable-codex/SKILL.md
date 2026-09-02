@@ -75,26 +75,27 @@ to delegate the build — don't ask again.
 The builder and the external reviewer are both codex — this read is the only
 cross-model eyes on the diff, so treat it as the pipeline's real review:
 
-- **Scope to the builder's delta — never bare `git diff`** (it mixes in
-  pre-existing uncommitted work and misses files the builder *created*). Read
-  `git diff -- <modified files>` plus every created file in full. Cross-check
-  the report's lists against `git status --porcelain` vs `baseline.txt` — any
-  unlisted change is a stray edit to chase down.
-- Check every hunk against the spec's design. For a bug fix, confirm the test
-  went red before the fix. Re-run the test command yourself.
-- Misses don't go "back to the builder" — each codex run is a **fresh
-  session**. Trivial misses: fix them inline yourself. Substantive misses:
-  write a new self-contained fix brief (what exists now, what's wrong, the
-  exact change) and re-run `codex-implement` with it. Backstop: after 3 build
-  rounds, finish inline.
+- Do the `codex-implement` skill's **Verify** and **Fix loop** steps in full
+  (delta scoped via `baseline.txt`, never bare `git diff`; every created file
+  read whole; report lists cross-checked; tests re-run; red-green confirmed
+  for a bug fix; misses fixed inline or via a new self-contained brief, with
+  its 3-round backstop). That skill is the single description of those steps —
+  don't improvise a lighter version here.
+- On top of that, check every hunk against the **spec's design**, not just
+  against the builder's report: the spec is yours, and this is where a builder
+  that quietly redesigned something gets caught.
+- Keep the list of files the builder touched (created + modified, from the
+  baseline diff) — step 4 hands it to the reviewer.
 
 ### 4. External review (codex-review skill)
 
 Invoke the `codex-review` skill via the Skill tool and follow **its** loop:
-pass a session-scope summary built from the builder's file lists, read the
-findings, triage them yourself, fix the valid ones, re-review until codex is
-clean or nothing new and valid remains. This command is the user's explicit
-request for that review — don't ask again.
+pass `--paths` with the builder's file list from step 3 (so codex diffs only
+the delta, not whatever else is uncommitted) plus a session-scope summary
+built from the spec, read the findings, triage them yourself, fix the valid
+ones, re-review — carrying the dismissed findings forward in the scope text as
+that skill describes — until codex is clean or nothing new and valid remains.
+This command is the user's explicit request for that review — don't ask again.
 
 The reviewer shares the builder's model family, but a fresh context under a
 review prompt still catches real bugs — it supplements your step-3 read, never
@@ -138,19 +139,25 @@ pipeline stopped early (say why in the message). Source
 `TELEGRAM_CHAT_ID`) and send a one-line summary:
 
 ```bash
-[ -f ~/.config/telegram-notify/env ] && . ~/.config/telegram-notify/env && \
-printf '%s' "✅ /fable-codex done in <repo>: <task> — tests <status>, review <status>" | \
-curl -sS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-  -d chat_id="${TELEGRAM_CHAT_ID}" \
-  --data-urlencode text@-
+if [ -f ~/.config/telegram-notify/env ]; then
+  . ~/.config/telegram-notify/env
+  msg='✅ /fable-codex done in <repo>: <task> — tests <status>, review <status>'
+  printf '%s' "$msg" | curl -fsS "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+    -d chat_id="${TELEGRAM_CHAT_ID}" --data-urlencode text@- >/dev/null \
+    && echo TELEGRAM_SENT || echo TELEGRAM_FAILED
+fi
 ```
 
-The text goes through stdin (`text@-`), not an argument: on Windows, Git Bash
-mangles non-ASCII argv when spawning native curl.exe (Telegram rejects it with
-"strings must be encoded in UTF-8"), while a pipe carries raw UTF-8 intact.
+Keep the message in **single quotes** so a task containing `"`, `$` or
+backticks can't break the command (if the task text itself has a single quote,
+drop or replace it). The text goes through stdin (`text@-`), not an argument:
+on Windows, Git Bash mangles non-ASCII argv when spawning native curl.exe
+(Telegram rejects it with "strings must be encoded in UTF-8"), while a pipe
+carries raw UTF-8 intact. `-f` turns an HTTP error into a non-zero exit, which
+is what makes `TELEGRAM_FAILED` reliable — without it curl exits 0 on a 400.
 
-If the config file is missing, skip silently. If the send fails, mention it in
-the report — never let notification failure affect the pipeline's result.
+If the config file is missing, skip silently. On `TELEGRAM_FAILED`, mention it
+in the report — never let notification failure affect the pipeline's result.
 
 ## Guardrails
 

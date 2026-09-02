@@ -36,7 +36,22 @@ The prompt also forbids edits as a second layer.
    itself — your summary tells it which of those changes are in scope and why. `review.sh`
    lives next to this SKILL.md — adjust the path if the skill is installed somewhere other
    than `~/.claude/skills`. A Sol/high round often takes several minutes, so pass a generous
-   Bash-tool `timeout` (e.g. 600000 ms) — the default 2 minutes can kill a round mid-review.
+   Bash-tool `timeout` (e.g. 600000 ms, the tool's maximum) — the default 2 minutes can kill a
+   round mid-review. If a round could run longer than that, use `run_in_background: true` and
+   wait for the completion notification; a killed script takes codex down with it.
+
+   **Restrict the diff with `--paths` whenever you know the files.** By default codex diffs the
+   whole working tree, so any unrelated uncommitted work gets reviewed too, with your summary as
+   the only filter. When you know exactly which files this session touched (you usually do; the
+   pipelines get the list from `git status --porcelain` vs their baseline), pass them as
+   repo-relative paths, whitespace-separated, **before** the scope:
+
+   ```bash
+   bash ~/.claude/skills/codex-review/review.sh --paths "src/api/profile.ts src/api/profile.test.ts" "This session: ..."
+   ```
+
+   Codex then diffs only those pathspecs and is told everything else is out of scope. Omit
+   `--paths` only when the whole uncommitted tree really is this session's work.
 
    **Cross-repo changes.** When this session's work spans more than one repo (e.g. you changed an
    API/contract/shared type in one repo and its consumer in another), pass each repo path as an
@@ -57,8 +72,9 @@ The prompt also forbids edits as a second layer.
      Fix the path and re-run (don't drop the repo silently if its changes are in scope).
    - Output starting with `CODEX_ERROR:` → relay the error (it includes codex's last log
      lines) and stop; don't loop on a broken call.
-   - Exit code 2 / `usage:` → you called it without a scope argument. Re-run with a real
-     session-scope summary (it's required; repo paths are optional and come after it).
+   - Exit code 2 / `usage:` → you called it without a scope argument (or `--paths` without
+     its value). Re-run with a real session-scope summary (it's required; `--paths` comes
+     before it, repo paths are optional and come after it).
    - A leading `WARNING:` line → a working tree changed during the review (codex shouldn't
      be able to write under the read-only sandbox). Surface it, run `git status` in each repo,
      and have the user verify before trusting the report.
@@ -76,8 +92,12 @@ The prompt also forbids edits as a second layer.
    - **Uncertain** whether a finding is valid or worth doing → ask the user (a short
      question, or AskUserQuestion) before acting. Don't guess on judgment calls.
 
-3. **Re-review.** After applying fixes, run the script again (same command) to let codex
-   re-check the updated changes.
+3. **Re-review.** After applying fixes, run the script again to let codex re-check the updated
+   changes. Same `--paths` and repos, but **extend the scope text** with two things: what you
+   fixed this round, and the findings you dismissed with their one-line reasons, e.g.
+   `Already triaged, intentionally not fixed — do not re-raise: (1) ... because ...; (2) ...`.
+   The prompt tells codex to skip anything listed there, so rounds stop re-litigating settled
+   items and only new problems come back.
 
 4. **Decide whether to loop.** Always evaluate the round's output before re-running. Keep a short
    running list of findings you've dismissed (and why) so you can recognize repeats across rounds.
@@ -100,11 +120,12 @@ The prompt also forbids edits as a second layer.
   `NO_CHANGES` only fires when every listed repo is clean.
 - Each codex round is a real external call (costs tokens, takes ~1–several minutes). That's
   why this is manual, not a hook — invoke it when you actually want the review.
-- The script pins the reviewer to the Sol model at HIGH reasoning effort
-  (`codex exec -m gpt-5.6-sol -c model_reasoning_effort="high"`), so the review never
-  depends on whatever model/effort `~/.codex/config.toml` currently holds (the ChatGPT
-  app's picker rewrites that file). Override via `CODEX_REVIEW_MODEL` / `CODEX_REVIEW_EFFORT`
-  only if the user explicitly asks.
+- The script pins the reviewer to the Sol model at HIGH reasoning effort (the exact model id
+  lives only at the top of `review.sh`), so the review never depends on whatever model/effort
+  `~/.codex/config.toml` currently holds (the ChatGPT app's picker rewrites that file).
+  Override via `CODEX_REVIEW_MODEL` / `CODEX_REVIEW_EFFORT` only if the user explicitly asks.
+- The prompt goes to codex through stdin, so its size isn't limited by the shell's argument
+  cap and non-ASCII text survives on Windows Git Bash.
 - To test the plumbing without calling codex (prints the prompt that would be sent):
   `CODEX_REVIEW_DRY_RUN=1 bash ~/.claude/skills/codex-review/review.sh "test scope"`.
   A scope arg is still required; dry-run runs before the no-changes guard, so it previews the

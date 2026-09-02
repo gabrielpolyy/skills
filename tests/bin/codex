@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Stand-in for the `codex` CLI used by tests/test.sh (on PATH as tests/bin/codex). Mimics the slice of
+# `codex exec` the scripts rely on: the prompt arrives on stdin (`-`), the final
+# message is written to the `-o <file>` path. Behavior is chosen by env:
+#
+#   FAKE_CODEX_MODE=ok      write NO_FINDINGS to -o (default)
+#   FAKE_CODEX_MODE=report  write REPORT to -o
+#   FAKE_CODEX_MODE=fail    exit 3 with a stderr message, no -o file
+#   FAKE_CODEX_MODE=empty   exit 0 without writing -o
+#   FAKE_CODEX_MODE=write   append to $FAKE_CODEX_TARGET, then write REPORT
+#   FAKE_CODEX_MODE=sleep   record $$ in $FAKE_CODEX_PID_FILE and sleep forever
+#
+# FAKE_CODEX_PROMPT_FILE, when set, receives the stdin prompt verbatim.
+out=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o) out="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+prompt="$(cat)"
+[ -n "${FAKE_CODEX_PROMPT_FILE:-}" ] && printf '%s' "$prompt" > "$FAKE_CODEX_PROMPT_FILE"
+case "${FAKE_CODEX_MODE:-ok}" in
+  ok)     printf 'NO_FINDINGS' > "$out" ;;
+  report) printf 'REPORT' > "$out" ;;
+  fail)   echo "fake codex: boom" >&2; exit 3 ;;
+  empty)  exit 0 ;;
+  write)  echo changed >> "$FAKE_CODEX_TARGET"; printf 'REPORT' > "$out" ;;
+  sleep)  echo "$$" > "$FAKE_CODEX_PID_FILE"; exec sleep 300 ;;
+esac

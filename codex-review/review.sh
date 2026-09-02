@@ -13,16 +13,24 @@
 # Read-only sandbox grants full-disk READ access, so codex can read every listed
 # repo (via `git -C <path>`) while still being unable to write anywhere.
 #
+# Paths: when you know exactly which files this session touched (the pipelines
+# do — they diff `git status` against a baseline), pass them with --paths so
+# codex diffs ONLY those pathspecs. Without it codex diffs the whole working
+# tree and the scope text is the only filter, so unrelated uncommitted work
+# gets reviewed too.
+#
 # Used by the global `codex-review` skill.
 #
-# Usage:  review.sh "<session scope: what changed this session and why>" [repo ...]
-#           - arg 1 (REQUIRED): the review scope.
+# Usage:  review.sh [--paths "<repo-relative paths, whitespace-separated>"] "<session scope>" [repo ...]
+#           - --paths (optional): restrict the review to these pathspecs (relative
+#             to each repo's root; paths containing whitespace are not supported).
+#           - arg 1 (REQUIRED): the review scope — what changed this session and why.
 #           - args 2..N (optional): repo paths to review. Default: the current repo.
 # Output: codex's findings, or the literal token NO_FINDINGS / NO_CHANGES / NOT_A_GIT_REPO,
 #         or a line starting with CODEX_ERROR: / WARNING:.
 # Env:    CODEX_REVIEW_DRY_RUN=1  -> print the prompt that would be sent, skip the codex call.
 #         CODEX_REVIEW_MODEL / CODEX_REVIEW_EFFORT -> override the pinned model/effort
-#         (default: gpt-5.6-sol / high).
+#         (defaults: the two assignments below — the only place the model id lives).
 
 set -uo pipefail
 
@@ -32,14 +40,26 @@ set -uo pipefail
 CODEX_REVIEW_MODEL="${CODEX_REVIEW_MODEL:-gpt-5.6-sol}"
 CODEX_REVIEW_EFFORT="${CODEX_REVIEW_EFFORT:-high}"
 
+usage() {
+  echo "usage: review.sh [--paths \"<repo-relative paths>\"] \"<session scope: what changed this session and why>\" [repo ...]" >&2
+  echo "  the scope argument is required; it tells codex which changes to review." >&2
+  echo "  --paths restricts the diff to those pathspecs (whitespace-separated)." >&2
+  echo "  optional repo paths after the scope review cross-repo changes in one pass." >&2
+  exit 2
+}
+
+# Optional --paths: whitespace-separated pathspecs relative to each repo root.
+have_paths=0; paths=()
+if [ "${1:-}" = "--paths" ]; then
+  [ "$#" -ge 2 ] || usage
+  set -f; paths=($2); set +f   # split on whitespace only, no globbing
+  shift 2
+  [ "${#paths[@]}" -gt 0 ] && have_paths=1
+fi
+
 # The scope argument is required — it defines what codex reviews. Fail fast on a
 # missing or blank scope rather than running a vague review.
-if [ "$#" -lt 1 ] || [ -z "${1//[[:space:]]/}" ]; then
-  echo "usage: review.sh \"<session scope: what changed this session and why>\" [repo ...]" >&2
-  echo "  the scope argument is required; it tells codex which changes to review." >&2
-  echo "  optional repo paths after it review cross-repo changes in one pass." >&2
-  exit 2
-fi
+if [ "$#" -lt 1 ] || [ -z "${1//[[:space:]]/}" ]; then usage; fi
 context="$1"; shift
 repo_args=("$@")
 
@@ -64,21 +84,36 @@ multi=0; [ "${#repos[@]}" -gt 1 ] && multi=1
 # `git diff HEAD` is invalid there and the prompt must steer codex elsewhere.
 repo_has_head() { git -C "$1" rev-parse --verify -q HEAD >/dev/null 2>&1; }
 
+# Shell-quoted pathspec suffix for the commands in the prompt, e.g. " -- 'a.ts' 'b.ts'".
+pathspec=""
+if [ "$have_paths" = 1 ]; then
+  for p in "${paths[@]}"; do pathspec+=" '$p'"; done
+  pathspec=" --$pathspec"
+fi
+
 # Per-repo instructions for how codex should gather that repo's changes.
 gather_block=""
 for dir in "${repos[@]}"; do
   if repo_has_head "$dir"; then
     gather_block+="
 - Repo '${dir}':
-    - git -C '${dir}' diff HEAD        (staged + unstaged changes to tracked files)
-    - git -C '${dir}' status --short   then read any new/untracked files it lists — git diff HEAD does NOT include them. Its paths are relative to this repo, so read each as '${dir}/<path>'."
+    - git -C '${dir}' diff HEAD${pathspec}        (staged + unstaged changes to tracked files)
+    - git -C '${dir}' status --short${pathspec}   then read any new/untracked files it lists — git diff HEAD does NOT include them. Its paths are relative to this repo, so read each as '${dir}/<path>'."
   else
     gather_block+="
 - Repo '${dir}' (NO commits yet — HEAD does not exist; do NOT run 'git diff HEAD' here):
-    - git -C '${dir}' status --short   and read EVERY file it lists; they are all new this session. Its paths are relative to this repo, so read each as '${dir}/<path>'.
-    - git -C '${dir}' diff --cached    to see staged content."
+    - git -C '${dir}' status --short${pathspec}   and read EVERY file it lists; they are all new this session. Its paths are relative to this repo, so read each as '${dir}/<path>'.
+    - git -C '${dir}' diff --cached${pathspec}    to see staged content."
   fi
 done
+
+paths_rule=""
+if [ "$have_paths" = 1 ]; then
+  paths_rule="
+ONLY these paths are in scope (relative to each repo root):${pathspec# --}
+Any other uncommitted change in the working tree is unrelated work from outside this session — do NOT
+review it, do NOT report on it. Diff and inspect only the paths above."
+fi
 
 # Cross-repo framing + finding-location hint, only when more than one repo is in scope.
 if [ "$multi" = 1 ]; then
@@ -106,6 +141,7 @@ Your entire output is a review report, nothing else.
 
 Gather the changes yourself by reading the diffs in each repository below:
 ${gather_block}
+${paths_rule}
 The diff is the source of truth for the code; the Session scope tells you which changes are in
 scope and why they were made. If the Session scope describes a change you cannot find in the diffs
 (e.g. it was already committed), note that instead of guessing. Do NOT review committed history or
@@ -121,6 +157,8 @@ Rules:
 - Review only. DO NOT modify, create, or delete any files.
 - Judge against the actual changes. Do not invent issues or flag pre-existing code the changes don't touch.
 - Ignore pure style/formatting/naming nits unless they cause a real bug.
+- If the Session scope lists findings that were already triaged and intentionally not fixed, do not
+  raise them again — only report NEW problems.
 - If there are NO valid, actionable findings, reply with exactly: NO_FINDINGS
 - Otherwise list each finding as: [severity] path:line — what's wrong — why — suggested fix. Be concise.${loc_rule}
 
@@ -131,24 +169,35 @@ EOF
 if [ "${CODEX_REVIEW_DRY_RUN:-0}" = "1" ]; then
   # Dry-run previews the prompt for testing; it deliberately runs BEFORE the
   # no-changes guard so the prompt is shown even in a clean tree.
-  echo "DRY_RUN: would run (cwd=${repos[0]}): codex exec --sandbox read-only -m $CODEX_REVIEW_MODEL -c model_reasoning_effort=$CODEX_REVIEW_EFFORT -o <tmp> \"<prompt below>\""
+  echo "DRY_RUN: would run (cwd=${repos[0]}): codex exec --sandbox read-only -m $CODEX_REVIEW_MODEL -c model_reasoning_effort=$CODEX_REVIEW_EFFORT -o <tmp> - <<<\"<prompt below>\""
   echo "----- repos -----"
   printf '%s\n' "${repos[@]}"
+  if [ "$have_paths" = 1 ]; then echo "----- paths -----"; printf '%s\n' "${paths[@]}"; fi
   echo "----- prompt -----"
   printf '%s\n' "$prompt"
   exit 0
 fi
 
-# Cheap guard: don't spend a codex call when nothing is uncommitted in ANY repo.
+# Cheap guard: don't spend a codex call when nothing is uncommitted in ANY repo
+# (within --paths, when given).
 any_dirty=0
 for dir in "${repos[@]}"; do
-  if repo_has_head "$dir"; then
-    git -C "$dir" diff --quiet HEAD 2>/dev/null || any_dirty=1
+  if [ "$have_paths" = 1 ]; then
+    if repo_has_head "$dir"; then
+      git -C "$dir" diff --quiet HEAD -- "${paths[@]}" 2>/dev/null || any_dirty=1
+    else
+      git -C "$dir" diff --cached --quiet -- "${paths[@]}" 2>/dev/null || any_dirty=1
+    fi
+    [ -n "$(git -C "$dir" ls-files --others --exclude-standard -- "${paths[@]}" 2>/dev/null)" ] && any_dirty=1
   else
-    # No commits yet: "dirty" means something is staged (index vs empty tree).
-    git -C "$dir" diff --cached --quiet 2>/dev/null || any_dirty=1
+    if repo_has_head "$dir"; then
+      git -C "$dir" diff --quiet HEAD 2>/dev/null || any_dirty=1
+    else
+      # No commits yet: "dirty" means something is staged (index vs empty tree).
+      git -C "$dir" diff --cached --quiet 2>/dev/null || any_dirty=1
+    fi
+    [ -n "$(git -C "$dir" ls-files --others --exclude-standard 2>/dev/null)" ] && any_dirty=1
   fi
-  [ -n "$(git -C "$dir" ls-files --others --exclude-standard 2>/dev/null)" ] && any_dirty=1
   [ "$any_dirty" = 1 ] && break
 done
 if [ "$any_dirty" = 0 ]; then
@@ -184,9 +233,14 @@ snapshot() {
   } | hash_cmd | awk '{print $1}'
 }
 
-out=""; log=""
+out=""; log=""; codex_pid=""
 cleanup() { rm -f -- "${out:-}" "${log:-}" 2>/dev/null || true; }
 trap cleanup EXIT
+# If THIS script is killed (e.g. the caller's timeout fires), take codex down with
+# it — an orphaned codex would keep running and burning tokens after the caller
+# has already given up on the run.
+on_signal() { [ -n "$codex_pid" ] && kill "$codex_pid" 2>/dev/null; exit 143; }
+trap on_signal TERM INT HUP
 out="$(mktemp)"; log="$(mktemp)"
 
 # Run from the first repo so codex's cwd is inside a git repo (it requires one);
@@ -199,12 +253,14 @@ before="$(snapshot)"
 # -m/-c pin the reviewer to Sol at HIGH reasoning effort: the review must not
 # silently run on whatever model/effort ~/.codex/config.toml happens to hold
 # (the ChatGPT app's model picker rewrites that config).
-# </dev/null: the prompt is passed as an argument, so codex must not also try to read
-# stdin — with a non-EOF stdin (e.g. a background/piped invocation) it would block
-# "Reading additional input from stdin..." or append unintended input to the prompt.
-codex exec --sandbox read-only -m "$CODEX_REVIEW_MODEL" -c model_reasoning_effort="$CODEX_REVIEW_EFFORT" \
-  -o "$out" "$prompt" </dev/null >"$log" 2>&1
-rc=$?
+# The prompt goes in via stdin (`-`), not argv: argv has a per-argument size cap
+# on Linux, and Git Bash on Windows mangles non-ASCII argv when spawning a native
+# exe, while a pipe carries raw UTF-8 intact.
+printf '%s' "$prompt" | codex exec --sandbox read-only -m "$CODEX_REVIEW_MODEL" \
+  -c model_reasoning_effort="$CODEX_REVIEW_EFFORT" -o "$out" - >"$log" 2>&1 &
+codex_pid=$!
+wait "$codex_pid"; rc=$?
+codex_pid=""
 if [ "$rc" -ne 0 ]; then
   echo "CODEX_ERROR: codex exec exited $rc. Last log lines:"
   tail -n 25 "$log"
