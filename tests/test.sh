@@ -25,6 +25,8 @@ not()       { ! "$@"; }
 eq()        { [ "$1" = "$2" ]; }
 # rc_and_contains <rc> <expected rc> <text> <needle>
 rc_and_contains() { [ "$1" = "$2" ] && contains "$3" "$4"; }
+# toplevel <dir> — the repo root as git spells it (Git Bash: C:/..., not /tmp/...).
+toplevel() { git -C "$1" rev-parse --show-toplevel; }
 
 # A git repo with one commit and two tracked files.
 mkrepo() {
@@ -84,7 +86,7 @@ out="$(cd "$tmp/r1" && CODEX_REVIEW_DRY_RUN=1 bash "$review" "scope" "$tmp/r1" "
 check "same repo twice dedupes (no cross-repo framing)" not contains "$out" "MULTIPLE repositories"
 out="$(cd "$tmp/r1" && CODEX_REVIEW_DRY_RUN=1 bash "$review" "scope" "$tmp/r1" "$tmp/r2" 2>&1)"
 check "two repos -> cross-repo framing" contains "$out" "MULTIPLE repositories"
-check "two repos -> second repo listed" contains "$out" "Repo '$tmp/r2'"
+check "two repos -> second repo listed" contains "$out" "Repo '$(toplevel "$tmp/r2")'"
 mkdir -p "$tmp/fresh" && git -C "$tmp/fresh" init -q . && echo x > "$tmp/fresh/f.txt" && git -C "$tmp/fresh" add f.txt
 out="$(cd "$tmp/fresh" && CODEX_REVIEW_DRY_RUN=1 bash "$review" "scope" 2>&1)"
 check "repo without HEAD -> no-commits instructions" contains "$out" "NO commits yet"
@@ -132,7 +134,7 @@ check "bogus repo arg -> CODEX_ERROR" rc_and_contains "$rc" 1 "$out" "not a git 
 out="$(cd "$tmp/r1" && CODEX_IMPLEMENT_DRY_RUN=1 bash "$implement" "$spec" 2>&1)"
 check "dry run embeds the spec" contains "$out" "Add a line to a.txt"
 out="$(cd "$tmp/notgit" && CODEX_IMPLEMENT_DRY_RUN=1 bash "$implement" "$spec" "$tmp/r1" 2>&1)"
-check "explicit repo arg resolves to its root" contains "$out" "cwd=$tmp/r1"
+check "explicit repo arg resolves to its root" contains "$out" "cwd=$(toplevel "$tmp/r1")"
 git -C "$tmp/r1" checkout -q -- . && git -C "$tmp/r1" clean -qfd
 out="$(cd "$tmp/r1" && FAKE_CODEX_PROMPT_FILE="$pf" FAKE_CODEX_MODE=write FAKE_CODEX_TARGET="$tmp/r1/a.txt" bash "$implement" "$spec" 2>&1)"
 check "spec reaches codex on stdin" contains "$(cat "$pf")" "Add a line to a.txt"
