@@ -15,6 +15,11 @@ changes, and scientific for uncertain methods requiring experiments. Scientific
 planning includes a baseline, hypotheses, and measurable acceptance criteria;
 its review examines the method and reproducible evidence as well as code.
 
+For an explicitly review-only task, `/high` uses just a fresh Astra medium or
+Fable high reviewer for the supplied PR/delta or audit evidence, without
+planning an implementation, building, or applying fixes. Normal `/high`
+implementation tasks retain the full pipeline above.
+
 Before implementation, select the eligible model with the most remaining
 quota, accounting for all shared/model caps and a reserve for review/fixes.
 Keep the selected builder through fixes unless it cannot finish. Quota cannot
