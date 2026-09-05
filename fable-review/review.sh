@@ -4,5 +4,5 @@ set -euo pipefail
 skill_dir="$(cd "$(dirname "$0")" && pwd -P)"
 export REVIEW_BACKEND=claude
 export REVIEW_MODEL=fable
-export REVIEW_EFFORT=high
+export REVIEW_EFFORT=xhigh
 exec bash "$skill_dir/../scripts/review.sh" "$@"

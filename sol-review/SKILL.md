@@ -1,6 +1,6 @@
 ---
 name: sol-review
-description: Review the requested code delta or supplied audit evidence with an independent Sol xhigh reviewer, reporting findings without fixes. Use for /sol-review or an explicit request for a Sol review.
+description: Review a code delta, existing repository source, or supplied audit evidence with an independent Sol xhigh reviewer, reporting findings without fixes. Use for /sol-review or an explicit request for a Sol review.
 ---
 
 # Sol review
@@ -38,8 +38,16 @@ An already-authorized caller may act on the report under its own policy.
    impact, and suggested correction. Discard demonstrably unsupported claims
    with a brief reason. Report the actual model and effort. `NO_FINDINGS` means
    no actionable findings within scope; `NO_CHANGES` means no matching delta.
-   Errors, empty output, `KILLED:`, or a tree-change warning mean incomplete
+   Errors, empty output, `KILLED:`, `DRY_RUN:`, or any `WARNING:` mean incomplete
    review. Do not rerun an unchanged review to obtain a clean verdict.
+
+## Whole-repository source review
+
+For an explicit review of existing code (including a clean tree), use
+`--audit "$scope_and_criteria" "$target_repo"`. Optional `--paths` restricts
+the source files; do not combine audit mode with evidence, baseline, or range.
+The reviewer reads current tracked and untracked source and reports existing
+defects. Use delta mode for ordinary task reviews.
 
 ## Audit evidence without a code delta
 

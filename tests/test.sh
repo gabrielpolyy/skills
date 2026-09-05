@@ -106,15 +106,15 @@ rm "$tmp/r1/c.txt"
 # --- prompt construction (dry run) ---
 echo edit >> "$tmp/r1/b.txt"
 out="$(cd "$tmp/r1" && REVIEW_DRY_RUN=1 bash "$review" --paths "b.txt src/x.ts" "my scope text" 2>&1)"
-check "dry run: full codex recipe" contains "$out" "codex exec --sandbox read-only -m gpt-6-astra -c model_reasoning_effort=medium -o <tmp> -"
-check "dry run: pathspec on diff command" contains "$out" "diff HEAD -- 'b.txt' 'src/x.ts'"
+check "dry run: full codex recipe" contains "$out" "codex exec --sandbox read-only -m gpt-6-astra -c model_reasoning_effort=high -o <tmp> -"
+check "dry run: pathspec on diff command" contains "$out" "diff --cached -- 'b.txt' 'src/x.ts'"
 check "dry run: pathspec on status command" contains "$out" "status --short -- 'b.txt' 'src/x.ts'"
 check "dry run: out-of-scope rule present" contains "$out" "ONLY these paths are in scope"
 check "dry run: scope text present" contains "$out" "my scope text"
 check "dry run: single repo has no cross-repo framing" not contains "$out" "MULTIPLE repositories"
 check "dry run: no baseline section without --baseline" not contains "$out" "BASELINE:"
 out="$(cd "$tmp/r1" && REVIEW_DRY_RUN=1 bash "$review" "scope" 2>&1)"
-check "dry run without --paths: bare diff HEAD" contains "$out" "diff HEAD        (staged"
+check "dry run without --paths: separate staged diff" contains "$out" "diff --cached    (staged"
 check "dry run without --paths: no paths rule" not contains "$out" "ONLY these paths"
 out="$(cd "$tmp/r1" && REVIEW_DRY_RUN=1 REVIEW_MODEL=gpt-5.6-sol REVIEW_EFFORT=xhigh bash "$review" "scope" 2>&1)"
 check "dry run: model/effort overrides appear in the recipe" contains "$out" "-m gpt-5.6-sol -c model_reasoning_effort=xhigh"
@@ -132,15 +132,15 @@ check "repo without HEAD with staged file -> runs codex" eq "$out" "NO_FINDINGS"
 # quoting: an apostrophe in a path and a space in the repo root
 echo q > "$tmp/r1/it's.txt"
 out="$(cd "$tmp/r1" && REVIEW_DRY_RUN=1 bash "$review" --paths "it's.txt" "scope" 2>&1)"
-check "apostrophe in --paths is shell-quoted" contains "$out" "diff HEAD -- 'it'\\''s.txt'"
+check "apostrophe in --paths is shell-quoted" contains "$out" "diff --cached -- 'it'\\''s.txt'"
 rm "$tmp/r1/it's.txt"
 mkrepo "$tmp/my repo"; echo edit >> "$tmp/my repo/a.txt"
 out="$(cd "$tmp/my repo" && REVIEW_DRY_RUN=1 bash "$review" "scope" 2>&1)"
-check "space in repo root is shell-quoted" contains "$out" "git -C '$(toplevel "$tmp/my repo")' diff HEAD"
+check "space in repo root is shell-quoted" contains "$out" "git -C '$(toplevel "$tmp/my repo")' diff --cached"
 # claude backend embeds the delta instead of gather instructions
 echo new > "$tmp/r1/c.txt"
 out="$(cd "$tmp/r1" && REVIEW_BACKEND=claude REVIEW_DRY_RUN=1 bash "$review" "scope" 2>&1)"
-check "claude dry run: full claude recipe" contains "$out" "claude -p --model fable --effort high --tools Read,Glob,Grep --strict-mcp-config --no-session-persistence"
+check "claude dry run: full claude recipe" contains "$out" "claude -p --model fable --effort xhigh --tools Read,Glob,Grep --strict-mcp-config --no-session-persistence"
 check "claude dry run: embeds the patch" contains "$out" "+edit"
 check "claude dry run: embeds untracked file contents" contains "$out" "### untracked file: c.txt"
 check "claude dry run: no gather-it-yourself block" not contains "$out" "Gather the changes yourself"
@@ -158,7 +158,7 @@ out="$(cd "$tmp/r1" && bash "$review" "scope" 2>"$tmp/err.txt")"
 check "normal run prints nothing on stderr (no job-control noise)" eq "$(cat "$tmp/err.txt")" ""
 check "codex argv: read-only sandbox" contains "$(cat "$af")" "sandbox=read-only"
 check "codex argv: default model" contains "$(cat "$af")" "gpt-6-astra"
-check "codex argv: default effort" contains "$(cat "$af")" "model_reasoning_effort=medium"
+check "codex argv: default effort" contains "$(cat "$af")" "model_reasoning_effort=high"
 check "codex argv: prompt from stdin (trailing -)" eq "$(last_line "$(cat "$af")")" "-"
 out="$(cd "$tmp/r1" && FAKE_CODEX_MODE=fail bash "$review" "scope" 2>&1)"; rc=$?
 check "codex non-zero exit -> ERROR, exit 1" rc_and_contains "$rc" 1 "$out" "exited 3"
@@ -183,7 +183,7 @@ check "claude argv: print mode" contains "$args" "-p"
 check "claude argv: model" contains "$args" "--model
 fable"
 check "claude argv: effort" contains "$args" "--effort
-high"
+xhigh"
 check "claude argv: read-only tools" contains "$args" "--tools
 Read,Glob,Grep"
 check "claude argv: strict mcp + no persistence" contains "$args" "--strict-mcp-config
@@ -265,24 +265,28 @@ ast="${repo_root}/astra-review/review.sh"; fab="${repo_root}/fable-review/review
 out="$(REVIEW_BACKEND=claude REVIEW_MODEL=opus REVIEW_EFFORT=xhigh FAKE_CODEX_ARGS_FILE="$af" bash "$ast" --paths "a.txt" "scope" "$tmp/r1" 2>&1)"
 check "Astra wrapper returns report" eq "$out" "NO_FINDINGS"
 check "Astra wrapper pins Codex/Astra" contains "$(cat "$af")" "gpt-6-astra"
-check "Astra default medium ignores inherited effort" contains "$(cat "$af")" "model_reasoning_effort=medium"
-out="$(FAKE_CODEX_ARGS_FILE="$af" bash "$ast" --effort high --paths "a.txt" "scope" "$tmp/r1" 2>&1)"
-check "explicit Astra high override" contains "$(cat "$af")" "model_reasoning_effort=high"
+check "Astra default high ignores inherited effort" contains "$(cat "$af")" "model_reasoning_effort=high"
+out="$(FAKE_CODEX_ARGS_FILE="$af" bash "$ast" --effort medium --paths "a.txt" "scope" "$tmp/r1" 2>&1)"
+check "explicit Astra medium override" contains "$(cat "$af")" "model_reasoning_effort=medium"
 out="$(REVIEW_BACKEND=codex REVIEW_MODEL=gpt-5.6-sol REVIEW_EFFORT=medium FAKE_CLAUDE_ARGS_FILE="$af" bash "$fab" --paths "a.txt" "scope" "$tmp/r1" 2>&1)"
 check "Fable wrapper returns report" eq "$out" "NO_FINDINGS"
 check "Fable wrapper pins model" contains "$(cat "$af")" "--model
 fable"
-check "Fable default high ignores inherited effort" contains "$(cat "$af")" "--effort
-high"
-out="$(FAKE_CLAUDE_ARGS_FILE="$af" bash "$fab" --paths "a.txt" --effort xhigh "scope" "$tmp/r1" 2>&1)"
-check "explicit Fable xhigh override" contains "$(cat "$af")" "--effort
+check "Fable default xhigh ignores inherited effort" contains "$(cat "$af")" "--effort
 xhigh"
+out="$(FAKE_CLAUDE_ARGS_FILE="$af" bash "$fab" --paths "a.txt" --effort high "scope" "$tmp/r1" 2>&1)"
+check "explicit Fable high override" contains "$(cat "$af")" "--effort
+high"
 out="$(bash "$ast" --effort bogus "scope" "$tmp/r1" 2>&1)"; rc=$?
 check "invalid effort fails before CLI" eq "$rc" 2
 
 # Wrappers work when the skill directory itself is installed as a link.
 mkdir -p "$tmp/skills"
-ln -s "$repo_root/astra-review" "$tmp/skills/astra-review"
+if [ "${OS:-}" = Windows_NT ]; then
+  MSYS_NO_PATHCONV=1 cmd.exe /d /c mklink /J "$(cygpath -w "$tmp/skills/astra-review")" "$(cygpath -w "$repo_root/astra-review")" > /dev/null
+else
+  ln -s "$repo_root/astra-review" "$tmp/skills/astra-review"
+fi
 out="$(bash "$tmp/skills/astra-review/review.sh" --paths "a.txt" "scope" "$tmp/r1" 2>&1)"
 check "installed symlink resolves shared helper" eq "$out" "NO_FINDINGS"
 

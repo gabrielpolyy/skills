@@ -7,19 +7,20 @@ There are no implementation workflows, planner agents, or quota selectors.
 | Skill | Reviewer | Default effort |
 |---|---|---|
 | [`sol-review`](sol-review/SKILL.md) | `gpt-5.6-sol` via Codex | xhigh |
-| [`astra-review`](astra-review/SKILL.md) | `gpt-6-astra` via Codex | medium |
-| [`fable-review`](fable-review/SKILL.md) | `fable` via Claude Code | high |
+| [`astra-review`](astra-review/SKILL.md) | `gpt-6-astra` via Codex | high |
+| [`fable-review`](fable-review/SKILL.md) | `fable` via Claude Code | xhigh |
 
 For a second model's perspective, use Fable review after Astra work, Astra
 review after Fable work, or Sol review after Opus work. Explicit effort
 requests override the default: for example, work in Astra high and request
-`fable-review at xhigh`, or work in Fable xhigh and request
-`astra-review at high`. The caller's model and effort remain unchanged.
+`fable-review at high`, or work in Fable xhigh and request
+`astra-review at medium`. The caller's model and effort remain unchanged.
 
 Reviews produce findings only and run in fresh read-only sessions. They do
 not implement fixes, launch another workflow, or publish anything. Code review
-covers the requested delta, including staged changes and new files; audit
-review can check supplied evidence even with no code changes. Reviewers read
+covers the requested delta, including staged changes and new files. Use
+`--audit` for whole-repository source reviews. Evidence review can check
+supplied claims even with no code changes. Reviewers read
 existing test results; they do not independently reproduce experiments.
 
 ## Install or update
@@ -47,7 +48,8 @@ CLI installed and logged in. On Windows use Git Bash for the review helpers.
 
 ```sh
 bash astra-review/review.sh --paths "src/app.ts tests/app.test.ts" "Scope and test results" /path/to/repo
-bash fable-review/review.sh --effort xhigh --range BASE..HEAD "Committed task scope" /path/to/repo
+bash fable-review/review.sh --effort high --range BASE..HEAD "Committed task scope" /path/to/repo
+bash fable-review/review.sh --audit "Review current skills against their documented contracts" /path/to/repo
 bash astra-review/review.sh --evidence /path/to/audit.txt "Check these conclusions" /path/to/repo
 ```
 
@@ -56,6 +58,18 @@ To review code and audit conclusions together, use delta mode and include
 both in the scope. `--paths` accepts whitespace-separated pathspecs; for
 filenames containing spaces, omit it and specify exact files in the scope.
 Legacy pre-task snapshots remain accepted via `--baseline`.
+
+Staged and unstaged patches are kept separately, even when they cancel in the
+working copy. Empty working-tree selections and committed ranges return
+`NO_CHANGES`. Git collection errors stop before the reviewer is called.
+
+Fable embeds untracked text up to 128 KiB per file and 512 KiB per repository.
+Untracked symlinks include their link target without following it. Binary,
+unreadable, non-regular, or oversized untracked entries receive `OMITTED`
+markers and a final
+`WARNING:` declaring the review incomplete. Embedded deltas over 2 MiB fail
+with an error asking for a narrower scope. `REVIEW_DRY_RUN=1` previews the
+prompt and recipe; `DRY_RUN:` is never a completed review.
 
 ## Checks
 
