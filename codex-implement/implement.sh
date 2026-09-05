@@ -26,8 +26,8 @@ set -uo pipefail
 # Pin the builder model + reasoning effort. NEVER rely on ~/.codex/config.toml
 # defaults — the ChatGPT app's model picker rewrites them, so an unpinned run
 # could silently build with a weaker model/effort.
-CODEX_IMPLEMENT_MODEL="${CODEX_IMPLEMENT_MODEL:-gpt-5.6-sol}"
-CODEX_IMPLEMENT_EFFORT="${CODEX_IMPLEMENT_EFFORT:-high}"
+CODEX_IMPLEMENT_MODEL="${CODEX_IMPLEMENT_MODEL:-gpt-6-astra}"
+CODEX_IMPLEMENT_EFFORT="${CODEX_IMPLEMENT_EFFORT:-medium}"
 
 # The spec file is required — it is the entire instruction set for the builder.
 # Fail fast on a missing or empty file rather than launching a vague build.
@@ -129,7 +129,7 @@ before="$(snapshot)"
 head_before="$(git rev-parse --verify -q HEAD 2>/dev/null || echo NONE)"
 # --sandbox workspace-write: codex can edit files in this repo and run the tests,
 # but cannot write outside it, reach the network, or (per the prompt) commit.
-# -m/-c pin the builder to Sol at HIGH reasoning effort — see the note above.
+# -m/-c pin the builder to Astra at MEDIUM reasoning effort — see the note above.
 # The prompt goes in via stdin (`-`), not argv: a near-final-code spec can exceed
 # Linux's per-argument size cap, and Git Bash on Windows mangles non-ASCII argv
 # when spawning a native exe, while a pipe carries raw UTF-8 intact.

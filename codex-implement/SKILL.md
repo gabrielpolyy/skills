@@ -38,7 +38,7 @@ the prompt, so the file can live outside the repo (scratchpad).
    git status --porcelain > <scratchpad>/baseline.txt
    ```
 
-3. **Run the builder.** A Sol/high build takes several minutes, so pass a generous Bash-tool
+3. **Run the builder.** An Astra/medium build can take several minutes, so pass a generous Bash-tool
    `timeout` (e.g. 600000 ms):
 
    ```bash
@@ -81,7 +81,7 @@ the prompt, so the file can live outside the repo (scratchpad).
 
 ## Notes
 
-- The script pins the builder to the Sol model at HIGH reasoning effort (the exact model id
+- The script pins the builder to the Astra model at MEDIUM reasoning effort (the exact model id
   lives only at the top of `implement.sh`) for the same reason `codex-review` pins its
   reviewer: the ChatGPT app's model picker rewrites `~/.codex/config.toml`, so an unpinned run
   could silently build with a weaker model. Override via `CODEX_IMPLEMENT_MODEL` /

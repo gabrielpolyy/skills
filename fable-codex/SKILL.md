@@ -1,6 +1,6 @@
 ---
 name: fable-codex
-description: Software-development-engineer pipeline with Fable designing and codex building — Fable (the main loop) plans and writes a near-final spec, the codex-implement skill (codex exec, workspace-write sandbox) implements it, Fable reviews the builder's delta against the spec (the pipeline's cross-model review), the codex-review skill (Sol) runs the external review pass and its findings are triaged and fixed until clean, and if the change is user-facing and the project has an e2e harness (e.g. a browser-e2e skill) an Opus subagent verifies the changed flow in the running app. Use when the user types /fable-codex with a task ("do this /fable-codex", "/fable-codex add X"), or asks for the Fable-designs, codex-implements pipeline in one shot.
+description: Software-development-engineer pipeline with Fable designing and codex building — Fable (the main loop) plans and writes a near-final spec, the codex-implement skill (codex exec, workspace-write sandbox) implements it, Fable reviews the builder's delta against the spec (the pipeline's cross-model review), the codex-review skill (Astra) runs the external review pass and its findings are triaged and fixed until clean, and if the change is user-facing and the project has an e2e harness (e.g. a browser-e2e skill) an Opus subagent verifies the changed flow in the running app. Use when the user types /fable-codex with a task ("do this /fable-codex", "/fable-codex add X"), or asks for the Fable-designs, codex-implements pipeline in one shot.
 user-invocable: true
 ---
 
@@ -64,7 +64,7 @@ git status --porcelain > <scratchpad>/baseline.txt
 ```
 
 Then invoke the `codex-implement` skill via the Skill tool with the spec path
-and follow **its** steps — it runs `implement.sh` (pinned to Sol at high
+and follow **its** steps — it runs `implement.sh` (pinned to Astra at medium
 reasoning effort), which embeds the spec into the prompt, confines writes to
 the repo, and warns when codex committed or the run changed nothing. Use a
 generous Bash timeout (600000 ms). This command is the user's explicit request
