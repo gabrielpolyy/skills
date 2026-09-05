@@ -55,6 +55,16 @@ class ReviewTests(unittest.TestCase):
                 self.assertIn("diff --cached", prompt)
                 self.assertIn("(unstaged changes", prompt)
 
+    def test_successful_git_conversion_warnings_do_not_pollute_report(self):
+        self.git("config", "core.autocrlf", "true")
+        self.commit_base()
+        (self.repo / "a.txt").write_bytes(b"changed\n")
+        for backend in ("fable", "astra"):
+            r = self.review(backend=backend)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(r.stdout, "NO_FINDINGS")
+            self.assertEqual(r.stderr, "")
+
     def test_unborn_repo_includes_unstaged_edits(self):
         (self.repo / "a.txt").write_text("staged\n")
         self.git("add", "a.txt")

@@ -187,6 +187,15 @@ cleanup() { rm -f -- "${out:-}" "${log:-}" 2>/dev/null || true; rm -rf -- "$scra
 trap cleanup EXIT
 fatal() { echo "ERROR: $*"; exit 1; }
 
+# Keep successful conversion/advice warnings out of the final-message channel,
+# while retaining stderr and exit status when inspection actually fails.
+read_git() {
+  local rc
+  git "$@" 2>"$scratch/git-error"; rc=$?
+  [ "$rc" = 0 ] || cat "$scratch/git-error" >&2
+  return "$rc"
+}
+
 # Validate every repository before any model call. git diff uses 1 for a delta
 # and >1 for errors; status/ls-files must succeed even for an empty selection.
 any_dirty=0
@@ -268,7 +277,7 @@ embed_delta() {
   printf '### repo: %s\n' "$dir"
   if [ -n "$range" ]; then
     printf '### diff %s %s\n' "$base_oid" "$head_oid"
-    git -C "$dir" -c core.pager=cat diff "$base_oid" "$head_oid" ${pathargs[@]+"${pathargs[@]}"} || return 1
+    read_git -C "$dir" -c core.pager=cat diff "$base_oid" "$head_oid" ${pathargs[@]+"${pathargs[@]}"} || return 1
     git -C "$dir" diff --numstat --no-renames -z "$base_oid" "$head_oid" ${pathargs[@]+"${pathargs[@]}"} > "$scratch/range-files" || return 1
     while IFS= read -r -d '' rec; do
       case "$rec" in -*) continue ;; esac
@@ -283,9 +292,9 @@ embed_delta() {
   printf '### status\n'
   git -C "$dir" status --short ${pathargs[@]+"${pathargs[@]}"} || return 1
   printf '### diff --cached (staged)\n'
-  git -C "$dir" -c core.pager=cat diff --cached ${pathargs[@]+"${pathargs[@]}"} || return 1
+  read_git -C "$dir" -c core.pager=cat diff --cached ${pathargs[@]+"${pathargs[@]}"} || return 1
   printf '### diff (unstaged)\n'
-  git -C "$dir" -c core.pager=cat diff ${pathargs[@]+"${pathargs[@]}"} || return 1
+  read_git -C "$dir" -c core.pager=cat diff ${pathargs[@]+"${pathargs[@]}"} || return 1
   git -C "$dir" ls-files --others --exclude-standard -z ${pathargs[@]+"${pathargs[@]}"} > "$scratch/untracked" || return 1
   while IFS= read -r -d '' f; do
     printf '### untracked file: %s\n' "$f"
@@ -484,8 +493,8 @@ snapshot_material() {
     printf '### repo: %s\n' "$dir"
     printf '### head: %s\n' "$(git -C "$dir" rev-parse --verify -q HEAD 2>/dev/null || echo NONE)"
     printf '### status\n'; git -C "$dir" status --porcelain ${excl[@]+"${excl[@]}"} || return 1
-    printf '### unstaged\n'; git -C "$dir" -c core.pager=cat diff ${excl[@]+"${excl[@]}"} || return 1          # worktree vs index
-    printf '### staged\n';   git -C "$dir" -c core.pager=cat diff --cached ${excl[@]+"${excl[@]}"} || return 1 # index vs HEAD/empty tree
+    printf '### unstaged\n'; read_git -C "$dir" -c core.pager=cat diff ${excl[@]+"${excl[@]}"} || return 1          # worktree vs index
+    printf '### staged\n';   read_git -C "$dir" -c core.pager=cat diff --cached ${excl[@]+"${excl[@]}"} || return 1 # index vs HEAD/empty tree
     git -C "$dir" ls-files --others --exclude-standard -z ${excl[@]+"${excl[@]}"} > "$scratch/snapshot-files" || return 1
     while IFS= read -r -d '' f; do
       printf '### untracked: %s\n' "$f"
