@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Choose from the profile's builder pool using observed quota, never credentials."""
+"""Choose from the profile's builder pool using observed quota, never credentials.
+
+Levels low/high/scientific rank that profile's builders. Level planner ranks
+Astra/Fable for the high profile's single planner; pool order defaults to Astra.
+"""
 
 import argparse
 from datetime import datetime, timezone
@@ -8,7 +12,7 @@ import math
 
 
 POOLS = {"low": ("sol", "opus"), "high": ("sol", "opus"),
-         "scientific": ("astra", "fable")}
+         "scientific": ("astra", "fable"), "planner": ("astra", "fable")}
 EFFORT = {"sol": "xhigh", "opus": "xhigh", "astra": "medium", "fable": "high"}
 
 
@@ -27,36 +31,50 @@ def percent(value):
     return value
 
 
+# Observation status: the score is a number ONLY for MEASURED; every other
+# status carries no score, so a negative measured score is never mistaken for
+# "unavailable" or "exhausted".
+UNAVAILABLE, EXHAUSTED, UNKNOWN, MEASURED = "unavailable", "exhausted", "unknown", "measured"
+
+
 def observation(row, now):
+    """Return (status, usable_score_or_None, reason) for one model's row."""
     if row is None:
-        return None, "usage unknown"
+        return UNKNOWN, None, "usage unknown"
     if not isinstance(row, dict):
         raise ValueError("model observation must be an object")
     available = row.get("available", True)
     if not isinstance(available, bool):
         raise ValueError("available must be a boolean")
     if not available:
-        return -1, "unavailable"
-    if not row.get("observed_at") or not row.get("source"):
-        return None, "usage unknown: missing timestamp/source"
-    age = (now - timestamp(row["observed_at"])).total_seconds()
-    if age < 0 or age > 300:
-        return None, "usage unknown: stale or future observation"
+        return UNAVAILABLE, None, row.get("source") or "unavailable"
     windows = row.get("windows")
-    if not windows or row.get("complete") is not True:
-        return None, "usage unknown: incomplete limits"
-    if not isinstance(windows, list):
+    if windows is not None and not isinstance(windows, list):
         raise ValueError("windows must be a list")
-    scores = []
-    for window in windows:
+    # Known exhaustion beats unknown completeness: any unreset window at zero
+    # excludes the model even when the rest of the observation is unusable.
+    for window in windows or []:
         if not isinstance(window, dict) or not window.get("name"):
             raise ValueError("each window needs a name")
         if window.get("resets_at") and timestamp(window["resets_at"]) <= now:
-            return None, "usage unknown: window reset; refresh observation"
+            continue
+        if percent(window["remaining_percent"]) <= 0:
+            return EXHAUSTED, None, "exhausted"
+    if not row.get("observed_at") or not row.get("source"):
+        return UNKNOWN, None, "usage unknown: missing timestamp/source"
+    age = (now - timestamp(row["observed_at"])).total_seconds()
+    if age < 0 or age > 300:
+        return UNKNOWN, None, "usage unknown: stale or future observation"
+    if not windows or row.get("complete") is not True:
+        return UNKNOWN, None, "usage unknown: incomplete limits"
+    scores = []
+    for window in windows:
+        if window.get("resets_at") and timestamp(window["resets_at"]) <= now:
+            return UNKNOWN, None, "usage unknown: window reset; refresh observation"
         # Reserve is explicit; zero is valid when this pool needs no reserve.
         scores.append(percent(window["remaining_percent"]) -
                       percent(window["reserve_percent"]))
-    return min(scores), "measured usable headroom"
+    return MEASURED, min(scores), "measured usable headroom"
 
 
 def choose(level, data, now=None):
@@ -65,19 +83,19 @@ def choose(level, data, now=None):
         raise ValueError("usage input must be an object keyed by model")
     pool = POOLS[level]
     states = {model: observation(data.get(model), now) for model in pool}
+    status = {model: states[model][0] for model in pool}
+    score = {model: states[model][1] for model in pool}
     viable = [model for model in pool
-              if states[model][0] is None or states[model][0] > 0]
+              if status[model] == UNKNOWN or (status[model] == MEASURED and score[model] > 0)]
     if level == "scientific":
-        def can_review(model):
-            score = states[model][0]
-            return score is None or (score >= 0 and all(
-                window["remaining_percent"] > 0
-                for window in data[model]["windows"]))
+        # The other model must review: it is viable unless known unavailable or
+        # exhausted. Reserve is not subtracted; review may spend it, so a
+        # measured score at or below zero still counts as a viable reviewer.
         viable = [model for model in viable
-                  if can_review(pool[1] if model == pool[0] else pool[0])]
-    complete = all(score is not None for score, _ in states.values())
-    measured = [model for model in viable if states[model][0] is not None]
-    selected = max(measured, key=lambda model: states[model][0]) if measured else (
+                  if status[pool[1] if model == pool[0] else pool[0]] not in (UNAVAILABLE, EXHAUSTED)]
+    complete = all(value == MEASURED for value in status.values())
+    measured = [model for model in viable if status[model] == MEASURED]
+    selected = max(measured, key=lambda model: score[model]) if measured else (
         viable[0] if viable else None)
     if not selected:
         reason = "No viable builder/reviewer allocation within the profile."
@@ -88,8 +106,8 @@ def choose(level, data, now=None):
     return {"level": level, "selected_model": selected,
             "effort": EFFORT.get(selected), "comparison_complete": complete,
             "reason": reason,
-            "observations": {m: {"usable_remaining_percent": s, "status": r}
-                             for m, (s, r) in states.items()}}
+            "observations": {m: {"usable_remaining_percent": s, "status": st, "reason": r}
+                             for m, (st, s, r) in states.items()}}
 
 
 def main():

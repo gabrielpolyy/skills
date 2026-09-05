@@ -1,63 +1,98 @@
 #!/usr/bin/env bash
-# codex-review helper: have codex review THIS SESSION's changes, read-only.
+# Shared review helper for the low/high/scientific workflows (and sol-review):
+# have a reviewer model review THIS SESSION's changes, read-only.
 #
-# Codex gathers the diff itself (it has repo read access); this script just
-# (a) requires a scope argument, (b) resolves one OR MORE repos to review,
-# (c) short-circuits when nothing is uncommitted in any of them, (d) runs codex
-# in a hard read-only sandbox, (e) verifies the working trees did not change
-# during the review, and (f) prints ONLY codex's final message.
+# This script (a) requires a scope argument, (b) resolves one OR MORE repos to
+# review, (c) short-circuits when nothing changed, (d) runs the reviewer with no
+# write access (codex: --sandbox read-only; claude: --tools Read,Glob,Grep),
+# (e) verifies the working trees did not change during the review, and
+# (f) prints ONLY the reviewer's final message.
+#
+# Backends. codex has repo read access and gathers the diff itself; claude has
+# no shell, so the delta (status, patch, untracked contents, or the commit-range
+# diff plus each touched file as it is at the range head) is EMBEDDED in the
+# prompt. Prompt rules, guards, and output contract are the same for both.
 #
 # Multiple repos: when a session's changes span repos (e.g. a contract changed in
 # one repo and its consumer in another), pass each repo path after the scope so a
-# single codex call can review them together and check cross-repo consistency.
-# Read-only sandbox grants full-disk READ access, so codex can read every listed
-# repo (via `git -C <path>`) while still being unable to write anywhere.
+# single call can review them together and check cross-repo consistency.
 #
-# Paths: when you know exactly which files this session touched (the pipelines
-# do — they diff `git status` against a baseline), pass them with --paths so
-# codex diffs ONLY those pathspecs. Without it codex diffs the whole working
-# tree and the scope text is the only filter, so unrelated uncommitted work
+# Paths: when you know exactly which files this session touched, pass them with
+# --paths so only those pathspecs are diffed. Without it the whole working tree
+# is diffed and the scope text is the only filter, so unrelated uncommitted work
 # gets reviewed too.
 #
-# Shared review helper for low/high/scientific profiles.
+# Baseline: implement.sh prints `SNAPSHOT: <file>` before it runs. Pass that file
+# with --baseline and the review compares against the pre-task state instead of
+# HEAD: restoring a pre-existing dirty file, or cancelling a staged change in the
+# working tree, is then a delta rather than NO_CHANGES.
 #
-# Usage:  review.sh [--paths "<repo-relative paths, whitespace-separated>"] "<session scope>" [repo ...]
-#           - --paths (optional): restrict the review to these pathspecs (relative
-#             to each repo's root; paths containing whitespace are not supported).
+# Range: --range <base>..<head> reviews committed work. There is no working-tree
+# guard; refs are resolved to object IDs and printed as `RANGE: <base> <head>`.
+#
+# Usage:  review.sh [--paths "<paths>"] [--baseline <file> | --range <base>..<head>] "<scope>" [repo ...]
+#           - --paths (optional): restrict the review to these whitespace-separated
+#             pathspecs (relative to each repo's root; paths containing whitespace
+#             are not supported).
+#           - --baseline (optional): snapshot file written by implement.sh.
+#           - --range (optional): committed range; one repo only. Excludes --baseline.
 #           - arg 1 (REQUIRED): the review scope — what changed this session and why.
 #           - args 2..N (optional): repo paths to review. Default: the current repo.
-# Output: codex's findings, or the literal token NO_FINDINGS / NO_CHANGES / NOT_A_GIT_REPO,
-#         or a line starting with CODEX_ERROR: / WARNING:.
-# Env:    CODEX_REVIEW_DRY_RUN=1  -> print the prompt that would be sent, skip the codex call.
-#         CODEX_REVIEW_MODEL / CODEX_REVIEW_EFFORT -> override the pinned model/effort
-#         (defaults: the two assignments below — the only place the model id lives).
+# Output: the reviewer's findings, or the literal token NO_FINDINGS / NO_CHANGES /
+#         NOT_A_GIT_REPO, or a line starting with ERROR: / WARNING: / KILLED:.
+# Exit:   0 ok; 1 backend error; 2 usage; 143 killed by a signal.
+# Env:    REVIEW_BACKEND=codex|claude  (default codex) -> which CLI runs the reviewer.
+#         REVIEW_MODEL / REVIEW_EFFORT -> the model and reasoning effort. The values
+#           below are DEFAULTS; the workflow overrides them per role and
+#           sol-review/review.sh pins Sol/xhigh.
+#         REVIEW_DRY_RUN=1 -> print the recipe and prompt, skip the CLI call.
 
 set -uo pipefail
 
-# Pin the reviewer model + reasoning effort. NEVER rely on ~/.codex/config.toml
-# defaults — the ChatGPT app's model picker rewrites them, so an unpinned run
-# could silently review with a weaker model/effort.
-CODEX_REVIEW_MODEL="${CODEX_REVIEW_MODEL:-gpt-6-astra}"
-CODEX_REVIEW_EFFORT="${CODEX_REVIEW_EFFORT:-medium}"
+# Model + effort are always passed explicitly. NEVER rely on ~/.codex/config.toml
+# or Claude's session defaults — the app model pickers rewrite them, so an
+# unpinned run could silently review with a weaker model/effort.
+REVIEW_BACKEND="${REVIEW_BACKEND:-codex}"
+case "$REVIEW_BACKEND" in
+  codex)  : "${REVIEW_MODEL:=gpt-6-astra}"; : "${REVIEW_EFFORT:=medium}" ;;
+  claude) : "${REVIEW_MODEL:=fable}";       : "${REVIEW_EFFORT:=high}" ;;
+  *) echo "usage: REVIEW_BACKEND must be codex or claude (got '$REVIEW_BACKEND')" >&2; exit 2 ;;
+esac
 
 usage() {
-  echo "usage: review.sh [--paths \"<repo-relative paths>\"] \"<session scope: what changed this session and why>\" [repo ...]" >&2
-  echo "  the scope argument is required; it tells codex which changes to review." >&2
-  echo "  --paths restricts the diff to those pathspecs (whitespace-separated)." >&2
+  echo "usage: review.sh [--paths \"<repo-relative paths>\"] [--baseline <snapshot-file> | --range <base>..<head>] \"<session scope: what changed this session and why>\" [repo ...]" >&2
+  echo "  the scope argument is required; it tells the reviewer which changes to review." >&2
+  echo "  --paths restricts the diff to those pathspecs (whitespace-separated, non-empty)." >&2
+  echo "  --baseline compares against the snapshot implement.sh wrote instead of HEAD." >&2
+  echo "  --range reviews a committed range in one repo (no working-tree guard)." >&2
   echo "  optional repo paths after the scope review cross-repo changes in one pass." >&2
   exit 2
 }
 
-# Optional --paths: whitespace-separated pathspecs relative to each repo root.
-have_paths=0; paths=()
-if [ "${1:-}" = "--paths" ]; then
-  [ "$#" -ge 2 ] || usage
-  set -f; paths=($2); set +f   # split on whitespace only, no globbing
-  shift 2
-  [ "${#paths[@]}" -gt 0 ] && have_paths=1
-fi
+# Options may appear in any order before the scope.
+have_paths=0; paths=(); baseline=""; range=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --paths)
+      [ "$#" -ge 2 ] || usage
+      [ -n "${2//[[:space:]]/}" ] || usage   # empty/blank --paths is a mistake, not "all paths"
+      set -f; paths=($2); set +f   # split on whitespace only, no globbing
+      have_paths=1; shift 2 ;;
+    --baseline)
+      [ "$#" -ge 2 ] && [ -s "$2" ] || usage
+      baseline="$2"; shift 2 ;;
+    --range)
+      [ "$#" -ge 2 ] || usage
+      case "$2" in *..*) ;; *) usage ;; esac
+      range="$2"; shift 2 ;;
+    --) shift; break ;;
+    -*) usage ;;
+    *) break ;;
+  esac
+done
+[ -n "$baseline" ] && [ -n "$range" ] && usage
 
-# The scope argument is required — it defines what codex reviews. Fail fast on a
+# The scope argument is required — it defines what gets reviewed. Fail fast on a
 # missing or blank scope rather than running a vague review.
 if [ "$#" -lt 1 ] || [ -z "${1//[[:space:]]/}" ]; then usage; fi
 context="$1"; shift
@@ -73,39 +108,124 @@ if [ "${#repo_args[@]}" -eq 0 ]; then
 else
   for p in "${repo_args[@]}"; do
     rt="$(git -C "$p" rev-parse --show-toplevel 2>/dev/null)"
-    if [ -z "$rt" ]; then echo "CODEX_ERROR: not a git repository: $p"; exit 1; fi
+    if [ -z "$rt" ]; then echo "ERROR: not a git repository: $p"; exit 1; fi
     dup=0; for e in "${repos[@]:-}"; do [ "$e" = "$rt" ] && { dup=1; break; }; done
     [ "$dup" = 0 ] && repos+=("$rt")
   done
 fi
 multi=0; [ "${#repos[@]}" -gt 1 ] && multi=1
 
+# A committed range applies to exactly one repo; resolve both ends to object IDs
+# now so the prompt (and the RANGE: line) name an exact, immutable delta.
+base_oid=""; head_oid=""
+if [ -n "$range" ]; then
+  [ "$multi" = 0 ] || { echo "ERROR: --range reviews a single repo" >&2; exit 2; }
+  base_oid="$(git -C "${repos[0]}" rev-parse --verify -q "${range%%..*}^{commit}" 2>/dev/null)"
+  head_oid="$(git -C "${repos[0]}" rev-parse --verify -q "${range#*..}^{commit}" 2>/dev/null)"
+  if [ -z "$base_oid" ] || [ -z "$head_oid" ]; then echo "ERROR: cannot resolve range $range in ${repos[0]}"; exit 1; fi
+fi
+
 # Does a repo have a HEAD commit? A fresh repo with no commits has no HEAD, so
-# `git diff HEAD` is invalid there and the prompt must steer codex elsewhere.
+# `git diff HEAD` is invalid there and the prompt must steer elsewhere.
 repo_has_head() { git -C "$1" rev-parse --verify -q HEAD >/dev/null 2>&1; }
+
+# sq <text> — single-quote text for a shell example inside the prompt (' -> '\'').
+sq() { local q="'" r="'\\''"; printf "'%s'" "${1//$q/$r}"; }
 
 # Shell-quoted pathspec suffix for the commands in the prompt, e.g. " -- 'a.ts' 'b.ts'".
 pathspec=""
 if [ "$have_paths" = 1 ]; then
-  for p in "${paths[@]}"; do pathspec+=" '$p'"; done
+  for p in "${paths[@]}"; do pathspec+=" $(sq "$p")"; done
   pathspec=" --$pathspec"
 fi
+# The baseline file may live inside a reviewed repo (implement.sh allows that).
+# It is not part of the delta: hide it from the embedded state, the no-changes
+# guard, and the fingerprints. `git rev-parse --show-prefix` spells the path the
+# way git does, so this also works under Git Bash.
+baseline_top=""; baseline_rel=""
+if [ -n "$baseline" ]; then
+  bdir="$(cd "$(dirname "$baseline")" 2>/dev/null && pwd -P)"
+  [ -n "$bdir" ] && baseline_top="$(git -C "$bdir" rev-parse --show-toplevel 2>/dev/null)"
+  [ -n "$baseline_top" ] && baseline_rel="$(git -C "$bdir" rev-parse --show-prefix)$(basename "$baseline")"
+fi
+# excl_for <repo> — sets excl=(-- . ':(exclude)<baseline>') when the baseline lives in that repo.
+excl_for() {
+  excl=()
+  [ -n "$baseline_rel" ] && [ "$1" = "$baseline_top" ] && excl=(-- . ":(exclude)$baseline_rel")
+  return 0
+}
+# set_pathargs <repo> — real pathspec arguments for the git commands this script
+# runs itself in that repo: --paths when given, plus the baseline exclusion.
+set_pathargs() {
+  excl_for "$1"; pathargs=()
+  if [ "$have_paths" = 1 ]; then
+    pathargs=(-- "${paths[@]}"); [ "${#excl[@]}" -gt 0 ] && pathargs+=("${excl[2]}")
+  else
+    pathargs=(${excl[@]+"${excl[@]}"})
+  fi
+  return 0
+}
+pathargs=(); excl=()
 
-# Per-repo instructions for how codex should gather that repo's changes.
+# --- The delta, per backend -------------------------------------------------
+# codex: instructions for gathering each repo's changes itself.
 gather_block=""
 for dir in "${repos[@]}"; do
-  if repo_has_head "$dir"; then
+  qd="$(sq "$dir")"
+  if [ -n "$range" ]; then
     gather_block+="
-- Repo '${dir}':
-    - git -C '${dir}' diff HEAD${pathspec}        (staged + unstaged changes to tracked files)
-    - git -C '${dir}' status --short${pathspec}   then read any new/untracked files it lists — git diff HEAD does NOT include them. Its paths are relative to this repo, so read each as '${dir}/<path>'."
+- Repo ${qd}: the delta is the committed range ${base_oid}..${head_oid}:
+    - git -C ${qd} diff ${base_oid} ${head_oid}${pathspec}
+    - git -C ${qd} show ${head_oid}:<path>   to read a file as it is at the reviewed head (the working tree may differ)."
+  elif repo_has_head "$dir"; then
+    gather_block+="
+- Repo ${qd}:
+    - git -C ${qd} diff HEAD${pathspec}        (staged + unstaged changes to tracked files)
+    - git -C ${qd} status --short${pathspec}   then read any new/untracked files it lists — git diff HEAD does NOT include them. Its paths are relative to this repo, so read each as ${qd}/<path>."
   else
     gather_block+="
-- Repo '${dir}' (NO commits yet — HEAD does not exist; do NOT run 'git diff HEAD' here):
-    - git -C '${dir}' status --short${pathspec}   and read EVERY file it lists; they are all new this session. Its paths are relative to this repo, so read each as '${dir}/<path>'.
-    - git -C '${dir}' diff --cached${pathspec}    to see staged content."
+- Repo ${qd} (NO commits yet — HEAD does not exist; do NOT run 'git diff HEAD' here):
+    - git -C ${qd} status --short${pathspec}   and read EVERY file it lists; they are all new this session. Its paths are relative to this repo, so read each as ${qd}/<path>.
+    - git -C ${qd} diff --cached${pathspec}    to see staged content."
   fi
 done
+
+# claude: the delta itself, embedded (no shell in the reviewer).
+embed_delta() {
+  local dir="$1" tab=$'\t' rec f
+  set_pathargs "$dir"
+  printf '### repo: %s\n' "$dir"
+  if [ -n "$range" ]; then
+    printf '### diff %s %s\n' "$base_oid" "$head_oid"
+    git -C "$dir" -c core.pager=cat diff "$base_oid" "$head_oid" ${pathargs[@]+"${pathargs[@]}"} 2>/dev/null
+    # The reviewer's Read/Glob/Grep see the working tree, which may differ from
+    # the reviewed head, so embed every touched file as it is AT the head.
+    # numstat prints "-<tab>-<tab>path" for binaries; a file deleted at the head
+    # has no object there. --no-renames keeps one plain path per record.
+    git -C "$dir" -c core.pager=cat diff --numstat --no-renames -z "$base_oid" "$head_oid" ${pathargs[@]+"${pathargs[@]}"} 2>/dev/null \
+      | while IFS= read -r -d '' rec; do
+          case "$rec" in -*) continue ;; esac
+          f="${rec#*$tab}"; f="${f#*$tab}"
+          git -C "$dir" cat-file -e "$head_oid:$f" 2>/dev/null || continue
+          printf '### file at %s: %s\n' "$head_oid" "$f"; git -C "$dir" show "$head_oid:$f" 2>/dev/null; printf '\n'
+        done
+    return
+  fi
+  printf '### status\n'; git -C "$dir" status --short ${pathargs[@]+"${pathargs[@]}"} 2>/dev/null
+  if repo_has_head "$dir"; then
+    printf '### diff HEAD\n'; git -C "$dir" -c core.pager=cat diff HEAD ${pathargs[@]+"${pathargs[@]}"} 2>/dev/null
+  else
+    printf '### diff --cached (no commits yet)\n'; git -C "$dir" -c core.pager=cat diff --cached ${pathargs[@]+"${pathargs[@]}"} 2>/dev/null
+  fi
+  git -C "$dir" ls-files --others --exclude-standard -z ${pathargs[@]+"${pathargs[@]}"} 2>/dev/null \
+    | while IFS= read -r -d '' f; do
+        printf '### untracked file: %s\n' "$f"; cat -- "$dir/$f" 2>/dev/null; printf '\n'
+      done
+}
+delta_block=""
+if [ "$REVIEW_BACKEND" = claude ]; then
+  for dir in "${repos[@]}"; do delta_block+="$(embed_delta "$dir")"$'\n'; done
+fi
 
 paths_rule=""
 if [ "$have_paths" = 1 ]; then
@@ -113,6 +233,21 @@ if [ "$have_paths" = 1 ]; then
 ONLY these paths are in scope (relative to each repo root):${pathspec# --}
 Any other uncommitted change in the working tree is unrelated work from outside this session — do NOT
 review it, do NOT report on it. Diff and inspect only the paths above."
+fi
+
+baseline_rule=""
+if [ -n "$baseline" ]; then
+  baseline_rule="
+BASELINE: the snapshot below records the repository state immediately BEFORE this session's task began
+(HEAD id, status, staged and unstaged patches, untracked file contents). The task delta is the DIFFERENCE
+between that baseline and the current state. Hunks or files already present in the baseline are
+pre-existing work, not this session's; a file restored to its committed contents IS a change if the
+baseline shows it modified. Judge only what changed relative to the baseline.
+----- baseline snapshot -----
+$(cat -- "$baseline")
+----- end baseline -----"
+  [ -n "$baseline_rel" ] && baseline_rule+="
+The snapshot file itself (${baseline_rel}, inside the repo) is not part of the delta; ignore it."
 fi
 
 # Cross-repo framing + finding-location hint, only when more than one repo is in scope.
@@ -128,6 +263,24 @@ else
   loc_rule=""
 fi
 
+if [ "$REVIEW_BACKEND" = codex ]; then
+  tools_rule="The only commands you may run are read-only inspection (git diff, git status, git log, reading files)."
+  delta_section="Gather the changes yourself by reading the diffs in each repository below:
+${gather_block}"
+elif [ -n "$range" ]; then
+  tools_rule="You have only file-reading tools (Read, Glob, Grep) and no shell; the delta is embedded below."
+  delta_section="The changes to review: the committed range ${base_oid}..${head_oid} (its patch, then the full contents
+at ${head_oid} of every file it touches):
+${delta_block}
+The working tree may differ from the reviewed head: the embedded file contents are authoritative. Read
+other files from the working tree only to verify a finding, and trust the embedded contents where they conflict."
+else
+  tools_rule="You have only file-reading tools (Read, Glob, Grep) and no shell; the delta is embedded below."
+  delta_section="The changes to review, per repository (status, patch, and full contents of new files):
+${delta_block}
+Read surrounding files from the working tree to verify a finding against the code."
+fi
+
 read -r -d '' prompt <<EOF
 You are a senior code reviewer. Review the work done in THIS SESSION. The scope is defined by the
 "Session scope" section at the bottom — what was changed this session and why.
@@ -135,13 +288,12 @@ ${scope_intro}
 
 THIS IS A READ-ONLY REVIEW. You must ONLY read and report. Do NOT modify, create, delete, move,
 or rename any file. Do NOT write code or apply fixes. Do NOT change git state in any way — no
-edits, no git add/commit/checkout/restore/stash/reset, no formatters, no codegen. The only
-commands you may run are read-only inspection (git diff, git status, git log, reading files).
+edits, no git add/commit/checkout/restore/stash/reset, no formatters, no codegen. ${tools_rule}
 Your entire output is a review report, nothing else.
 
-Gather the changes yourself by reading the diffs in each repository below:
-${gather_block}
+${delta_section}
 ${paths_rule}
+${baseline_rule}
 The diff is the source of truth for the code; the Session scope tells you which changes are in
 scope and why they were made. If the Session scope describes a change you cannot find in the diffs
 (e.g. it was already committed), note that instead of guessing. Do NOT review committed history or
@@ -166,10 +318,25 @@ Session scope — what was changed in this session and why:
 ${context}
 EOF
 
-if [ "${CODEX_REVIEW_DRY_RUN:-0}" = "1" ]; then
-  # Dry-run previews the prompt for testing; it deliberately runs BEFORE the
-  # no-changes guard so the prompt is shown even in a clean tree.
-  echo "DRY_RUN: would run (cwd=${repos[0]}): codex exec --sandbox read-only -m $CODEX_REVIEW_MODEL -c model_reasoning_effort=$CODEX_REVIEW_EFFORT -o <tmp> - <<<\"<prompt below>\""
+# The exact CLI recipe per backend. The prompt goes in via stdin, not argv: argv
+# has a per-argument size cap on Linux, and Git Bash on Windows mangles non-ASCII
+# argv when spawning a native exe, while a pipe carries raw UTF-8 intact.
+#   codex:  --sandbox read-only can read the repos but cannot write, edit, or
+#           change git state — a hard guarantee, not just a prompt instruction.
+#   claude: --tools Read,Glob,Grep leaves no shell or edit tool; --strict-mcp-config
+#           keeps MCP servers out.
+recipe() {
+  case "$REVIEW_BACKEND" in
+    codex)  printf '%s' "codex exec --sandbox read-only -m $REVIEW_MODEL -c model_reasoning_effort=$REVIEW_EFFORT -o <tmp> -" ;;
+    claude) printf '%s' "claude -p --model $REVIEW_MODEL --effort $REVIEW_EFFORT --tools Read,Glob,Grep --strict-mcp-config --no-session-persistence" ;;
+  esac
+}
+
+[ -n "$range" ] && echo "RANGE: $base_oid $head_oid"
+if [ "${REVIEW_DRY_RUN:-0}" = "1" ]; then
+  # Dry-run previews the recipe and prompt for testing; it deliberately runs BEFORE
+  # the no-changes guard so the prompt is shown even in a clean tree.
+  echo "DRY_RUN: would run (cwd=${repos[0]}; backend=${REVIEW_BACKEND}): $(recipe) <<<\"<prompt below>\""
   echo "----- repos -----"
   printf '%s\n' "${repos[@]}"
   if [ "$have_paths" = 1 ]; then echo "----- paths -----"; printf '%s\n' "${paths[@]}"; fi
@@ -178,104 +345,106 @@ if [ "${CODEX_REVIEW_DRY_RUN:-0}" = "1" ]; then
   exit 0
 fi
 
-# Cheap guard: don't spend a codex call when nothing is uncommitted in ANY repo
-# (within --paths, when given).
-any_dirty=0
-for dir in "${repos[@]}"; do
-  if [ "$have_paths" = 1 ]; then
+# Fingerprint ALL uncommitted state across every repo (same material and layout
+# as implement.sh's snapshot): HEAD id, status, staged + unstaged tracked content
+# AND the full contents of untracked files, whatever their size. `git diff` /
+# `git diff --cached` are HEAD-independent (they diff against the empty tree
+# when there is no commit).
+hash_cmd() { if command -v shasum >/dev/null 2>&1; then shasum; else cksum; fi; }
+snapshot_material() {
+  for dir in "${repos[@]}"; do
+    excl_for "$dir"
+    printf '### repo: %s\n' "$dir"
+    printf '### head: %s\n' "$(git -C "$dir" rev-parse --verify -q HEAD 2>/dev/null || echo NONE)"
+    printf '### status\n'; git -C "$dir" status --porcelain ${excl[@]+"${excl[@]}"} 2>/dev/null
+    printf '### unstaged\n'; git -C "$dir" -c core.pager=cat diff ${excl[@]+"${excl[@]}"} 2>/dev/null          # worktree vs index
+    printf '### staged\n';   git -C "$dir" -c core.pager=cat diff --cached ${excl[@]+"${excl[@]}"} 2>/dev/null # index vs HEAD/empty tree
+    git -C "$dir" ls-files --others --exclude-standard -z ${excl[@]+"${excl[@]}"} 2>/dev/null \
+      | while IFS= read -r -d '' f; do
+          printf '### untracked: %s\n' "$f"; cat -- "$dir/$f" 2>/dev/null
+        done
+  done
+}
+snapshot() { snapshot_material | hash_cmd | awk '{print $1}'; }
+
+# Cheap guard: don't spend a reviewer call when nothing changed. With --baseline
+# "changed" means "differs from the snapshot" (whole tree, so a task that only
+# restored a pre-existing edit still counts); otherwise "differs from HEAD",
+# within --paths when given. A committed range has nothing to guard.
+if [ -n "$baseline" ]; then
+  if [ "$(snapshot)" = "$(hash_cmd < "$baseline" | awk '{print $1}')" ]; then echo "NO_CHANGES"; exit 0; fi
+elif [ -z "$range" ]; then
+  any_dirty=0
+  for dir in "${repos[@]}"; do
+    set_pathargs "$dir"
     if repo_has_head "$dir"; then
-      git -C "$dir" diff --quiet HEAD -- "${paths[@]}" 2>/dev/null || any_dirty=1
-    else
-      git -C "$dir" diff --cached --quiet -- "${paths[@]}" 2>/dev/null || any_dirty=1
-    fi
-    [ -n "$(git -C "$dir" ls-files --others --exclude-standard -- "${paths[@]}" 2>/dev/null)" ] && any_dirty=1
-  else
-    if repo_has_head "$dir"; then
-      git -C "$dir" diff --quiet HEAD 2>/dev/null || any_dirty=1
+      git -C "$dir" diff --quiet HEAD ${pathargs[@]+"${pathargs[@]}"} 2>/dev/null || any_dirty=1
     else
       # No commits yet: "dirty" means something is staged (index vs empty tree).
-      git -C "$dir" diff --cached --quiet 2>/dev/null || any_dirty=1
+      git -C "$dir" diff --cached --quiet ${pathargs[@]+"${pathargs[@]}"} 2>/dev/null || any_dirty=1
     fi
-    [ -n "$(git -C "$dir" ls-files --others --exclude-standard 2>/dev/null)" ] && any_dirty=1
-  fi
-  [ "$any_dirty" = 1 ] && break
-done
-if [ "$any_dirty" = 0 ]; then
-  echo "NO_CHANGES"
-  exit 0
+    [ -n "$(git -C "$dir" ls-files --others --exclude-standard ${pathargs[@]+"${pathargs[@]}"} 2>/dev/null)" ] && any_dirty=1
+    [ "$any_dirty" = 1 ] && break
+  done
+  if [ "$any_dirty" = 0 ]; then echo "NO_CHANGES"; exit 0; fi
 fi
 
-# Fingerprint ALL uncommitted state across every repo so we can prove codex changed
-# nothing (belt-and-suspenders behind the read-only sandbox): staged + unstaged tracked
-# content AND the contents of untracked files. `git diff` / `git diff --cached` are
-# HEAD-independent (they diff against the empty tree when there is no commit).
-hash_cmd() { if command -v shasum >/dev/null 2>&1; then shasum; else cksum; fi; }
-snapshot() {
-  {
-    for dir in "${repos[@]}"; do
-      printf '### repo: %s\n' "$dir"
-      git -C "$dir" status --porcelain 2>/dev/null
-      git -C "$dir" -c core.pager=cat diff 2>/dev/null          # unstaged: worktree vs index
-      git -C "$dir" -c core.pager=cat diff --cached 2>/dev/null # staged: index vs HEAD/empty tree
-      # Untracked file contents (the diffs above never include these). Hash content for
-      # normal-sized files; for large blobs fall back to name+size to stay fast.
-      git -C "$dir" ls-files --others --exclude-standard -z 2>/dev/null \
-        | while IFS= read -r -d '' f; do
-            full="$dir/$f"
-            sz=$(wc -c < "$full" 2>/dev/null || echo 0)
-            if [ "${sz:-0}" -gt 1048576 ]; then
-              printf '== %s (%s bytes) ==\n' "$f" "$sz"
-            else
-              printf '== %s ==\n' "$f"; cat -- "$full" 2>/dev/null
-            fi
-          done
-    done
-  } | hash_cmd | awk '{print $1}'
-}
-
-out=""; log=""; codex_pid=""
+out=""; log=""; child_pid=""
 cleanup() { rm -f -- "${out:-}" "${log:-}" 2>/dev/null || true; }
 trap cleanup EXIT
-# If THIS script is killed (e.g. the caller's timeout fires), take codex down with
-# it — an orphaned codex would keep running and burning tokens after the caller
-# has already given up on the run.
-on_signal() { [ -n "$codex_pid" ] && kill "$codex_pid" 2>/dev/null; exit 143; }
+# If THIS script is killed (e.g. the caller's timeout fires), take the reviewer
+# down with it — an orphaned reviewer would keep running and burning tokens after
+# the caller has already given up on the run. The child runs in its own process
+# group when the platform allows (set -m), so its own subprocesses die too.
+stop_child() {
+  [ -n "$child_pid" ] || return 0
+  local pgid mine
+  pgid="$(ps -o pgid= -p "$child_pid" 2>/dev/null | tr -d ' ')"
+  mine="$(ps -o pgid= -p "$$" 2>/dev/null | tr -d ' ')"
+  # Kill the child's whole process group only when it really is a separate group.
+  if [ -n "$pgid" ] && [ "$pgid" != "$mine" ]; then kill -- -"$pgid" 2>/dev/null; else kill "$child_pid" 2>/dev/null; fi
+  wait "$child_pid" 2>/dev/null
+}
+on_signal() { stop_child; echo "KILLED: reviewer stopped by signal; inspect git status"; exit 143; }
 trap on_signal TERM INT HUP
 out="$(mktemp)"; log="$(mktemp)"
 
-# Run from the first repo so codex's cwd is inside a git repo (it requires one);
-# the prompt drives all repos by absolute path via `git -C`.
-cd "${repos[0]}" || { echo "CODEX_ERROR: cannot cd to ${repos[0]}"; exit 1; }
+# Run from the first repo so the reviewer's cwd is inside a git repo (codex
+# requires one); the prompt drives all repos by absolute path.
+cd "${repos[0]}" || { echo "ERROR: cannot cd to ${repos[0]}"; exit 1; }
 
 before="$(snapshot)"
-# --sandbox read-only: codex can read the repos to review, but cannot write, edit,
-# or change git state — a hard guarantee, not just a prompt instruction.
-# -m/-c pin the reviewer to Astra at MEDIUM reasoning effort: the review must not
-# silently run on whatever model/effort ~/.codex/config.toml happens to hold
-# (the ChatGPT app's model picker rewrites that config).
-# The prompt goes in via stdin (`-`), not argv: argv has a per-argument size cap
-# on Linux, and Git Bash on Windows mangles non-ASCII argv when spawning a native
-# exe, while a pipe carries raw UTF-8 intact.
-printf '%s' "$prompt" | codex exec --sandbox read-only -m "$CODEX_REVIEW_MODEL" \
-  -c model_reasoning_effort="$CODEX_REVIEW_EFFORT" -o "$out" - >"$log" 2>&1 &
-codex_pid=$!
-wait "$codex_pid"; rc=$?
-codex_pid=""
+set -m 2>/dev/null
+case "$REVIEW_BACKEND" in
+  codex)
+    printf '%s' "$prompt" | codex exec --sandbox read-only -m "$REVIEW_MODEL" \
+      -c model_reasoning_effort="$REVIEW_EFFORT" -o "$out" - >"$log" 2>&1 &
+    ;;
+  claude)
+    # claude -p prints the final message on stdout; that is the report.
+    printf '%s' "$prompt" | claude -p --model "$REVIEW_MODEL" --effort "$REVIEW_EFFORT" \
+      --tools Read,Glob,Grep --strict-mcp-config --no-session-persistence >"$out" 2>"$log" &
+    ;;
+esac
+child_pid=$!
+set +m 2>/dev/null
+wait "$child_pid"; rc=$?
+child_pid=""
 if [ "$rc" -ne 0 ]; then
-  echo "CODEX_ERROR: codex exec exited $rc. Last log lines:"
+  echo "ERROR: $REVIEW_BACKEND exited $rc. Last log lines:"
   tail -n 25 "$log"
   exit 1
 fi
 if [ ! -s "$out" ]; then
-  echo "CODEX_ERROR: codex produced no final message. Last log lines:"
+  echo "ERROR: $REVIEW_BACKEND produced no final message. Last log lines:"
   tail -n 25 "$log"
   exit 1
 fi
 
 after="$(snapshot)"
 if [ -n "$before" ] && [ "$before" != "$after" ]; then
-  echo "WARNING: a working tree changed during the review — codex may have modified files"
-  echo "despite the read-only sandbox. Run 'git status' in each repo and inspect before trusting this report."
+  echo "WARNING: a working tree changed during the review — the reviewer may have modified files"
+  echo "despite having no write access. Run 'git status' in each repo and inspect before trusting this report."
   echo
 fi
 cat "$out"

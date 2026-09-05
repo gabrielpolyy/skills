@@ -24,17 +24,18 @@ start a review/fix loop. Do not invoke the low/high/scientific workflow.
    bash "$skill_dir/review.sh" --paths "$changed_paths" "$scope" "$target_repo"
    ```
 
-   The wrapper pins Sol/xhigh regardless of inherited model settings. It uses
-   the repository's shared Codex helper in a read-only sandbox. It requires
-   Bash, Git, and an authenticated `codex` CLI. Do not silently substitute a
-   different model or effort if Sol is unavailable.
+   The wrapper pins the Codex backend, Sol, and xhigh regardless of inherited
+   `REVIEW_*` settings. It uses the repository's shared review helper in a
+   read-only sandbox. It requires Bash, Git, and an authenticated `codex` CLI.
+   Do not silently substitute a different model or effort if Sol is unavailable.
 
    `--paths` is whitespace-separated; for filenames containing whitespace,
-   omit it and give the exact paths and baseline/delta in the scope. Pass
-   multiple repo roots after the scope for a cross-repo delta; use separate
-   calls when each repo needs different path filters. Surrounding code may
-   be read to verify a finding, but only problems introduced by the task's
-   delta belong in the report.
+   omit it and give the exact paths and baseline/delta in the scope. Add
+   `--baseline <snapshot>` when implement.sh's snapshot exists. Pass multiple
+   repo roots after the scope for a cross-repo delta; use separate calls when
+   each repo needs different path filters. Surrounding code may be read to
+   verify a finding, but only problems introduced by the task's delta belong
+   in the report.
 3. Read the reviewer output and report actionable findings as ordinary Markdown,
    ordered **P0, P1, P2, P3**, with file and line, concrete impact, and suggested
    correction. Do not use code-comment directives or apply the correction.
@@ -43,14 +44,14 @@ start a review/fix loop. Do not invoke the low/high/scientific workflow.
 
 `NO_FINDINGS` means no actionable findings in the reviewed delta. `NO_CHANGES`
 means no matching uncommitted delta exists, not that committed work was reviewed.
-Errors, empty output, or a working-tree-change warning are not a clean review;
-report the limitation and inspect state read-only. Do not run tests, formatters,
-or code generation during this review; read existing test evidence instead.
+Errors, empty output, a `KILLED:` line, or a working-tree-change warning are
+not a clean review; report the limitation and inspect state read-only. Do not
+run tests, formatters, or code generation during this review; read existing
+test evidence instead.
 
-The helper does not review commit ranges. If the user explicitly supplies a
-committed base/head or patch, use a fresh `codex exec --sandbox read-only
--m gpt-5.6-sol -c model_reasoning_effort=xhigh` with a self-contained brief on
-stdin identifying that exact delta and the same report-only constraints. Resolve
-Git refs read-only before supplying their object IDs. Do not invent a base,
-review the whole repository, or fall back to historical commits just because
-the working tree is clean.
+If the user explicitly supplies a committed base/head, run the same wrapper
+with `--range <base>..<head>`; it resolves the refs to object IDs read-only,
+prints them, and gives the reviewer exactly that diff. For a patch file that
+is not in Git, apply it in a detached scratch worktree and review there in the
+default delta mode. Do not invent a base, review the whole repository, or fall
+back to historical commits just because the working tree is clean.

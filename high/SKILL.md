@@ -1,19 +1,19 @@
 ---
 name: high
-description: Plan substantial software changes with Astra and Fable, delegate implementation to Sol or Opus by remaining quota, and require Astra or Fable review. Also supports explicitly requested review-only work on an existing PR, delta, or audit findings using the high review stage.
+description: Plan substantial software changes with Astra or Fable selected by remaining quota, delegate implementation to Sol or Opus by remaining quota, and require review by the other of Astra or Fable; also runs review-only work on an existing PR, delta, or audit findings. Use only for /high or an explicit request for the high workflow or its review by name.
 ---
 
 # High
 
-Use this profile with the required [shared workflow](../shared/workflow.md).
-Resolve this skill's real repository location before following relative links
-when installed through a symlink or Windows junction.
+Use this profile with the required [shared workflow](../shared/workflow.md),
+which covers invocation, repository location, dispatch, and usage.
 
 | Stage | Models and effort |
 |---|---|
-| Plan | Astra medium + Fable high |
+| Coordinate | Recommended Fable high or Astra medium; Opus or Sol acceptable |
+| Plan | Astra medium OR Fable high, selected by remaining quota |
 | Implement | Sol xhigh OR Opus xhigh, selected by remaining quota |
-| Review | Astra medium OR Fable high, in a fresh context |
+| Review | Prefer the model NOT used for planning: Astra medium OR Fable high, in a fresh context |
 
 ## Review-only requests
 
@@ -32,11 +32,12 @@ evidence, or failed invocation is incomplete review, not a clean result.
 
 Provide the precise review scope, requirements, baseline, delta or audit
 evidence, and existing verification results. For a PR/commit range, resolve
-the requested base/head and merge base to object IDs, inspect that exact
-diff, and read surrounding code at the reviewed head. Do not use the shared
-uncommitted-diff helper for committed PRs. Dispatch a fresh read-only Codex
-call with Astra/medium, or a Fable/high agent with read-only tools and the
-actual diff/evidence supplied. Avoid unrelated working-tree changes.
+the requested base/head (the merge base for a PR) and run the shared review
+helper with `--range <base>..<head>` and the chosen backend; it prints the
+resolved object IDs and gives the reviewer that exact diff, read-only. For an
+uncommitted delta use `--paths` and, when available, `--baseline`. For audit
+findings without a diff, pipe the evidence to a fresh read-only call as the
+shared workflow shows for planners. Avoid unrelated working-tree changes.
 
 Return concrete findings with severity, location, impact, and evidence, or
 explicitly report no actionable findings within scope. Apply any user-specified
@@ -46,17 +47,28 @@ Review alone adds no permission to publish, approve, deploy, or change files.
 
 ## Implementation requests
 
-Delegate these roles explicitly; the main session can coordinate regardless of
-its model. Pick a planning lead by capacity. The lead proposes a concrete plan;
-the other model challenges it against the actual code, contracts, failure
-cases, and validation strategy. Reconcile material disagreements into one
-self-contained implementation brief. Both models must contribute to planning.
+Select ONE planner, Astra medium or Fable high, by usable headroom within the
+Astra/Fable pool using the fetcher with the selector's `planner` level:
+
+```bash
+python3 "$skills_repo/scripts/fetch-usage.py" --reserve 10 --choose planner
+```
+
+Unknown quota is a disclosed fallback that defaults to Astra among available
+models. The planner alone produces the self-contained implementation brief,
+checked against the actual code, contracts, failure cases, and validation
+strategy. Report the actual planner and effort.
 
 Recheck usage after planning before choosing Sol or Opus to implement. Resolve
 difficult design decisions in the plan; if the builder finds a new design
-question, route it back to the planners instead of accepting an improvised
-architecture. Select the reviewer by remaining capacity within Astra/Fable.
-A planning contribution does not substitute for review of the finished delta.
+question, route it back to the planner instead of accepting an improvised
+architecture.
+
+Review prefers the model NOT used for planning: Fable high after an Astra
+plan, Astra medium after a Fable plan. If that opposite model is unavailable
+or exhausted, use the planning model in a fresh context and report that
+fallback explicitly. Planning does not substitute for review of the finished
+delta.
 
 Escalate a scientific subproblem separately when the underlying method needs
 investigation; explain the scope and proposed level change. Never silently

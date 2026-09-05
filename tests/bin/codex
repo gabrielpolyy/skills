@@ -1,24 +1,46 @@
 #!/usr/bin/env bash
 # Stand-in for the `codex` CLI used by tests/test.sh (on PATH as tests/bin/codex). Mimics the slice of
 # `codex exec` the scripts rely on: the prompt arrives on stdin (`-`), the final
-# message is written to the `-o <file>` path. Behavior is chosen by env:
+# message is written to the `-o <file>` path. It VALIDATES the helper's contract:
+# `exec`, `--sandbox <mode>`, `-m <model>`, `-c model_reasoning_effort=<effort>`,
+# `-o <file>` and a trailing `-` must all be present, or it exits 64 loudly.
+# Behavior is chosen by env:
 #
 #   FAKE_CODEX_MODE=ok      write NO_FINDINGS to -o (default)
 #   FAKE_CODEX_MODE=report  write REPORT to -o
 #   FAKE_CODEX_MODE=fail    exit 3 with a stderr message, no -o file
 #   FAKE_CODEX_MODE=empty   exit 0 without writing -o
 #   FAKE_CODEX_MODE=write   append to $FAKE_CODEX_TARGET, then write REPORT
+#   FAKE_CODEX_MODE=run     run $FAKE_CODEX_CMD with sh -c, then write REPORT
 #   FAKE_CODEX_MODE=sleep   record $$ in $FAKE_CODEX_PID_FILE and sleep forever
 #
 # FAKE_CODEX_PROMPT_FILE, when set, receives the stdin prompt verbatim.
-[ -n "${FAKE_CODEX_ARGS_FILE:-}" ] && printf '%s\n' "$@" > "$FAKE_CODEX_ARGS_FILE"
-out=""
+# FAKE_CODEX_ARGS_FILE, when set, receives argv one per line; the sandbox mode is
+# also recorded as a `sandbox=<mode>` line.
+out=""; sandbox=""; model=""; effort=""; last=""; sub=""
+argv=("$@")
+[ "${1:-}" = exec ] && sub=exec
 while [ "$#" -gt 0 ]; do
+  last="$1"
   case "$1" in
     -o) out="$2"; shift 2 ;;
+    --sandbox) sandbox="$2"; shift 2 ;;
+    -m) model="$2"; shift 2 ;;
+    -c) case "$2" in model_reasoning_effort=*) effort="${2#model_reasoning_effort=}" ;; esac; shift 2 ;;
     *) shift ;;
   esac
 done
+if [ -n "${FAKE_CODEX_ARGS_FILE:-}" ]; then
+  { printf 'sandbox=%s\n' "$sandbox"; printf '%s\n' "${argv[@]}"; } > "$FAKE_CODEX_ARGS_FILE"
+fi
+missing=""
+[ "$sub" = exec ] || missing="$missing exec"
+[ -n "$sandbox" ] || missing="$missing --sandbox"
+[ -n "$model" ] || missing="$missing -m"
+[ -n "$effort" ] || missing="$missing model_reasoning_effort"
+[ -n "$out" ] || missing="$missing -o"
+[ "$last" = "-" ] || missing="$missing trailing-dash"
+if [ -n "$missing" ]; then echo "fake codex: contract violated, missing:$missing" >&2; exit 64; fi
 prompt="$(cat)"
 [ -n "${FAKE_CODEX_PROMPT_FILE:-}" ] && printf '%s' "$prompt" > "$FAKE_CODEX_PROMPT_FILE"
 case "${FAKE_CODEX_MODE:-ok}" in
@@ -27,5 +49,6 @@ case "${FAKE_CODEX_MODE:-ok}" in
   fail)   echo "fake codex: boom" >&2; exit 3 ;;
   empty)  exit 0 ;;
   write)  echo changed >> "$FAKE_CODEX_TARGET"; printf 'REPORT' > "$out" ;;
+  run)    sh -c "$FAKE_CODEX_CMD" || exit 65; printf 'REPORT' > "$out" ;;
   sleep)  echo "$$" > "$FAKE_CODEX_PID_FILE"; exec sleep 300 ;;
 esac

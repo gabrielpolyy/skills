@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Stand-in for the `claude` CLI used by tests/test.sh (on PATH as tests/bin/claude).
+# Mimics the slice of `claude -p` the scripts rely on: the prompt arrives on
+# stdin, the final message is printed on stdout. It VALIDATES the helper's
+# contract: `-p`, `--model <m>`, `--effort <e>`, `--no-session-persistence`, and
+# either `--permission-mode <mode>` (builder) or `--tools <list>` (reviewer) must
+# be present, or it exits 64 loudly. Behavior is chosen by env:
+#
+#   FAKE_CLAUDE_MODE=ok      print $FAKE_CLAUDE_OUTPUT (default NO_FINDINGS) (default)
+#   FAKE_CLAUDE_MODE=fail    exit 3 with a stderr message, nothing on stdout
+#   FAKE_CLAUDE_MODE=empty   exit 0 without printing anything
+#   FAKE_CLAUDE_MODE=run     run $FAKE_CLAUDE_CMD with sh -c, then print the output
+#   FAKE_CLAUDE_MODE=sleep   record $$ in $FAKE_CLAUDE_PID_FILE and sleep forever
+#
+# FAKE_CLAUDE_PROMPT_FILE, when set, receives the stdin prompt verbatim.
+# FAKE_CLAUDE_ARGS_FILE, when set, receives argv one per line.
+[ -n "${FAKE_CLAUDE_ARGS_FILE:-}" ] && printf '%s\n' "$@" > "$FAKE_CLAUDE_ARGS_FILE"
+print=0; model=""; effort=""; mode=""; tools=""; persist=1
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -p|--print) print=1; shift ;;
+    --model) model="$2"; shift 2 ;;
+    --effort) effort="$2"; shift 2 ;;
+    --permission-mode) mode="$2"; shift 2 ;;
+    --tools) tools="$2"; shift 2 ;;
+    --no-session-persistence) persist=0; shift ;;
+    *) shift ;;
+  esac
+done
+missing=""
+[ "$print" = 1 ] || missing="$missing -p"
+[ -n "$model" ] || missing="$missing --model"
+[ -n "$effort" ] || missing="$missing --effort"
+[ "$persist" = 0 ] || missing="$missing --no-session-persistence"
+[ -n "$mode" ] || [ -n "$tools" ] || missing="$missing --permission-mode/--tools"
+if [ -n "$missing" ]; then echo "fake claude: contract violated, missing:$missing" >&2; exit 64; fi
+prompt="$(cat)"
+[ -n "${FAKE_CLAUDE_PROMPT_FILE:-}" ] && printf '%s' "$prompt" > "$FAKE_CLAUDE_PROMPT_FILE"
+case "${FAKE_CLAUDE_MODE:-ok}" in
+  ok)     printf '%s' "${FAKE_CLAUDE_OUTPUT:-NO_FINDINGS}" ;;
+  fail)   echo "fake claude: boom" >&2; exit 3 ;;
+  empty)  exit 0 ;;
+  run)    sh -c "$FAKE_CLAUDE_CMD" || exit 65; printf '%s' "${FAKE_CLAUDE_OUTPUT:-REPORT}" ;;
+  sleep)  echo "$$" > "$FAKE_CLAUDE_PID_FILE"; exec sleep 300 ;;
+esac
