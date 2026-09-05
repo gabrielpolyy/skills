@@ -2,6 +2,7 @@ import contextlib
 import importlib.util
 import io
 import os
+import re
 import subprocess
 from pathlib import Path
 import tempfile
@@ -100,7 +101,7 @@ class InstallTests(unittest.TestCase):
         second = Path(self.temp.name) / "second"
         second.mkdir()
         (second / "scientific").mkdir()   # unrelated skill: must not be replaced
-        with self.assertRaisesRegex(ValueError, str(second / "scientific")):
+        with self.assertRaisesRegex(ValueError, re.escape(str(second / "scientific"))):
             installer.install(self.repo, [self.dest, second])
         self.assertEqual(os.listdir(self.dest), [])
         self.assertEqual(os.listdir(second), ["scientific"])
@@ -108,7 +109,7 @@ class InstallTests(unittest.TestCase):
     def test_second_destination_that_is_a_file_fails_before_any_change(self):
         second = Path(self.temp.name) / "second"
         second.write_text("not a directory")
-        with self.assertRaisesRegex(ValueError, str(second)):
+        with self.assertRaisesRegex(ValueError, re.escape(str(second))):
             installer.install(self.repo, [self.dest, second])
         self.assertEqual(os.listdir(self.dest), [])
         self.assertEqual(second.read_text(), "not a directory")
@@ -116,7 +117,7 @@ class InstallTests(unittest.TestCase):
     def test_second_destination_under_a_file_fails_before_any_change(self):
         parent = Path(self.temp.name) / "parent"
         parent.write_text("not a directory")
-        with self.assertRaisesRegex(ValueError, str(parent)):
+        with self.assertRaisesRegex(ValueError, re.escape(str(parent))):
             installer.install(self.repo, [self.dest, parent / "skills"])
         self.assertEqual(os.listdir(self.dest), [])
         self.assertEqual(parent.read_text(), "not a directory")
