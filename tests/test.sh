@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Offline tests for codex-review/review.sh and codex-implement/implement.sh.
+# Offline tests for scripts/review.sh and scripts/implement.sh.
 # A fake `codex` (tests/bin/codex) is put first on PATH, so nothing here calls
 # the real CLI. Run: bash tests/test.sh
 set -u
 
 here="$(cd "$(dirname "$0")" && pwd)"
 repo_root="$(cd "$here/.." && pwd)"
-review="$repo_root/codex-review/review.sh"
-implement="$repo_root/codex-implement/implement.sh"
+review="$repo_root/scripts/review.sh"
+implement="$repo_root/scripts/implement.sh"
 export PATH="$here/bin:$PATH"   # tests/bin/codex is the fake
 chmod +x "$here/bin/codex"
 

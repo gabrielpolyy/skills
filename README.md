@@ -1,87 +1,67 @@
 # useful-skills
 
-A small collection of [Claude Code](https://claude.com/claude-code) skills I use.
+Three engineering workflows for Claude Code or Codex. Every workflow includes
+planning, usage-based implementation assignment, and independent review.
 
-## Skills
+| Skill | Planning | Implementation | Review |
+|---|---|---|---|
+| [`/low`](low/SKILL.md) | Sol or Opus **xhigh** | Sol or Opus **xhigh** | Prefer the other model, **xhigh** |
+| [`/high`](high/SKILL.md) | Astra **medium** + Fable **high** | Sol or Opus **xhigh** | Astra **medium** or Fable **high** |
+| [`/scientific`](scientific/SKILL.md) | Astra **high** + Fable **xhigh** | Astra **medium** or Fable **high** | The other model, at those same implementation efforts |
 
-### [`codex-review`](./codex-review)
+Use low for routine bounded changes, high for substantial features and contract
+changes, and scientific for uncertain methods requiring experiments. Scientific
+planning includes a baseline, hypotheses, and measurable acceptance criteria;
+its review examines the method and reproducible evidence as well as code.
 
-Have an external reviewer (`codex exec`, in a read-only sandbox) review what changed
-in the current session, then triage and fix the valid findings — iterating until codex
-is clean or the only remaining findings aren't worth acting on.
+Before implementation, select the eligible model with the most remaining
+quota, accounting for all shared/model caps and a reserve for review/fixes.
+Keep the selected builder through fixes unless it cannot finish. Quota cannot
+always be read automatically: unavailable or stale usage is explicitly reported
+as unknown, with a disclosed fallback instead of an invented usage comparison.
+The [selector](scripts/choose-builder.py) consumes fresh normalized observations
+from the agent's available usage surface; it does not query provider accounts.
+See the [input format](shared/usage-format.md) and [shared workflow](shared/workflow.md).
 
-Invoke with `/codex-review`, or ask Claude to "review the current changes with codex"
-right after implementing something. `review.sh --paths "<files>"` restricts the diff to
-the files the session touched; the pipelines below always pass it.
+## Install or update
 
-**Requires** the [`codex`](https://github.com/openai/codex) CLI on your `PATH`.
-
-### [`codex-implement`](./codex-implement)
-
-Delegate an implementation to an external builder: `codex exec` (in a workspace-write
-sandbox — repo writes only, no network, no commits) implements a self-contained spec
-in the current repo and runs the tests; Claude then verifies the delta against the
-brief. The inverse of `codex-review`.
-
-Invoke with `/codex-implement <task>`, or ask Claude to "have codex implement this".
-
-**Requires** the [`codex`](https://github.com/openai/codex) CLI on your `PATH`.
-
-### [`fable-codex`](./fable-codex)
-
-The pipeline with the roles swapped at the build step — Fable designs, codex
-implements: Fable (the main loop) plans and writes the near-final spec, the
-`codex-implement` skill has codex build it in a workspace-write sandbox, Fable
-reviews the delta against the spec (the pipeline's cross-model review, since codex
-also runs the external `codex-review` pass), and an Opus subagent verifies
-user-facing changes end-to-end in the running app. Refuses to run if the session
-model isn't Fable.
-
-Invoke with `/fable-codex <task>`.
-
-**Requires** the [`codex-implement`](./codex-implement) and
-[`codex-review`](./codex-review) skills (this repo) and the
-[`codex`](https://github.com/openai/codex) CLI on your `PATH` — codex is the builder
-in this variant.
-
-### [`opus-codex`](./opus-codex)
-
-The same pipeline on a fixed model budget — no Fable anywhere: Opus (the main
-loop) plans and writes the spec, an Opus subagent implements it, the
-`codex-review` skill (Sol at high reasoning effort) is the pipeline's code
-reviewer, and an Opus subagent verifies user-facing changes end-to-end in the
-running app. Refuses to run if the session model isn't Opus.
-
-Invoke with `/opus-codex <task>`.
-
-**Requires** the [`codex-review`](./codex-review) skill (this repo) and the
-[`codex`](https://github.com/openai/codex) CLI on your `PATH` — codex is the
-only code reviewer in this variant.
-
-## Installing a skill
-
-Copy (or symlink) a skill directory into your Claude Code skills folder:
+Keep the entire repository together. From its root, run:
 
 ```sh
-# personal (all projects)
-ln -s "$PWD/codex-review" ~/.claude/skills/codex-review
-
-# or project-scoped
-ln -s "$PWD/codex-review" /path/to/project/.claude/skills/codex-review
+python3 scripts/install.py
 ```
 
-Restart Claude Code (or start a new session) so it picks up the skill.
+On Windows use `python scripts/install.py` (or `py -3`). The installer creates
+directory junctions there and symlinks on macOS/Linux. It replaces only retired
+links pointing into this repository and refuses to overwrite unrelated skills.
+It is safe to rerun after `git pull --ff-only`.
 
-## Tests
+The default destination is `~/.claude/skills`. To also install for Codex:
 
-The scripts' guards (argument handling, no-changes short-circuit, `--paths`, multi-repo,
-no-HEAD repos, output passthrough, and killing codex when the script is killed) are covered
-by a plain-bash suite that swaps in a fake `codex`, so it never calls the real CLI:
+```sh
+python3 scripts/install.py --skills-dir ~/.codex/skills
+```
+
+Start a new session to discover `/low`, `/high`, and `/scientific` (in Codex,
+use `$low`, `$high`, or `$scientific`). These replace `codex-review`,
+`codex-implement`, `opus-codex`, and `fable-codex`; their old invocation names
+are removed. Their Codex execution helpers remain internal scripts.
+
+Roles require actual access to their named models through native agent tools
+or the `codex`/`claude` CLIs. The coordinator can be any model. Missing model
+access is reported rather than silently substituted. The shared Codex helpers
+need Bash and Git (Git Bash on Windows, not the WSL launcher); the selector
+and installer need Python 3. The CLI helpers preserve existing permissions.
+
+## Checks
+
+These use temporary repositories and fake CLIs; they do not consume model quota:
 
 ```sh
 bash tests/test.sh
+python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
 ## License
 
-[MIT](./LICENSE)
+[MIT](LICENSE)

@@ -19,7 +19,7 @@
 # tree and the scope text is the only filter, so unrelated uncommitted work
 # gets reviewed too.
 #
-# Used by the global `codex-review` skill.
+# Shared review helper for low/high/scientific profiles.
 #
 # Usage:  review.sh [--paths "<repo-relative paths, whitespace-separated>"] "<session scope>" [repo ...]
 #           - --paths (optional): restrict the review to these pathspecs (relative

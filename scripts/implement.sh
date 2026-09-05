@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # codex-implement helper: have codex IMPLEMENT a spec in a repo, sandboxed.
 #
-# The inverse of codex-review/review.sh: codex gets WRITE access to the repo
+# The inverse of scripts/review.sh: codex gets WRITE access to the repo
 # (--sandbox workspace-write) so it can edit files and run tests, but the
 # boundaries stay hard: writes are confined to the repo (+ temp dirs), network
 # is off, and git history must not move — the prompt forbids commits and the
@@ -9,7 +9,7 @@
 # the file itself can live anywhere (e.g. the scratchpad) and codex never
 # depends on reading a path outside the repo.
 #
-# Used by the global `codex-implement` skill (and the fable-codex pipeline).
+# Shared implementation helper for low/high/scientific profiles.
 #
 # Usage:  implement.sh <spec-file> [repo]
 #           - arg 1 (REQUIRED): existing, non-empty file holding the spec/brief.
