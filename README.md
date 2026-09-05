@@ -2,7 +2,7 @@
 
 Three independent review skills for Codex and Claude Code. Work in your chosen
 session model to plan, implement, and test, then invoke a reviewer when ready.
-There are no implementation workflows, planner agents, or quota selectors.
+The calling session handles fixes and tests; each independent reviewer stays read-only.
 
 | Skill | Reviewer | Default effort |
 |---|---|---|
@@ -16,12 +16,22 @@ requests override the default: for example, work in Astra high and request
 `fable-review at high`, or work in Fable xhigh and request
 `astra-review at medium`. The caller's model and effort remain unchanged.
 
-Reviews produce findings only and run in fresh read-only sessions. They do
-not implement fixes, launch another workflow, or publish anything. Code review
-covers the requested delta, including staged changes and new files. Use
-`--audit` for whole-repository source reviews. Evidence review can check
-supplied claims even with no code changes. Reviewers read
-existing test results; they do not independently reproduce experiments.
+Each skill runs an autonomous review–fix–test loop by default. The calling
+session investigates every finding, fixes valid in-scope issues, records concrete
+counterevidence for discards, runs relevant checks, and requests fresh reviews
+until every in-scope finding is resolved. Unrelated findings are recorded as
+out of scope with evidence. No confirmation is needed between routine
+iterations. An explicit findings-only, no-edits, or single-pass request takes
+precedence. Genuine access or authorization blockers are reported as incomplete.
+
+Reviewers run in fresh read-only sessions and report findings only; they never
+apply fixes or publish anything. The shell helpers below perform one review
+per invocation; the skill's calling session drives the loop. Code review covers
+the cumulative requested delta, including staged changes and new files, while
+preserving any valid pre-task baseline and explicit hunk exclusions. Never
+create a task baseline after its edits have begun. Use `--audit` for whole-repository source reviews.
+Evidence review can check supplied claims even with no code changes. Reviewers
+read existing test results; the caller runs tests and experiments.
 
 ## Install or update
 
