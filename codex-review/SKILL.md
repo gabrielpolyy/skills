@@ -35,7 +35,7 @@ The prompt also forbids edits as a second layer.
    The script runs from anywhere (it cd's to the repo root) and codex diffs the working tree
    itself — your summary tells it which of those changes are in scope and why. `review.sh`
    lives next to this SKILL.md — adjust the path if the skill is installed somewhere other
-   than `~/.claude/skills`. A Sol/high round often takes several minutes, so pass a generous
+   than `~/.claude/skills`. An Astra/medium round can take several minutes, so pass a generous
    Bash-tool `timeout` (e.g. 600000 ms, the tool's maximum) — the default 2 minutes can kill a
    round mid-review. If a round could run longer than that, use `run_in_background: true` and
    wait for the completion notification; a killed script takes codex down with it.
@@ -120,7 +120,7 @@ The prompt also forbids edits as a second layer.
   `NO_CHANGES` only fires when every listed repo is clean.
 - Each codex round is a real external call (costs tokens, takes ~1–several minutes). That's
   why this is manual, not a hook — invoke it when you actually want the review.
-- The script pins the reviewer to the Sol model at HIGH reasoning effort (the exact model id
+- The script pins the reviewer to the Astra model at MEDIUM reasoning effort (the exact model id
   lives only at the top of `review.sh`), so the review never depends on whatever model/effort
   `~/.codex/config.toml` currently holds (the ChatGPT app's picker rewrites that file).
   Override via `CODEX_REVIEW_MODEL` / `CODEX_REVIEW_EFFORT` only if the user explicitly asks.

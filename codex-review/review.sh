@@ -37,8 +37,8 @@ set -uo pipefail
 # Pin the reviewer model + reasoning effort. NEVER rely on ~/.codex/config.toml
 # defaults — the ChatGPT app's model picker rewrites them, so an unpinned run
 # could silently review with a weaker model/effort.
-CODEX_REVIEW_MODEL="${CODEX_REVIEW_MODEL:-gpt-5.6-sol}"
-CODEX_REVIEW_EFFORT="${CODEX_REVIEW_EFFORT:-high}"
+CODEX_REVIEW_MODEL="${CODEX_REVIEW_MODEL:-gpt-6-astra}"
+CODEX_REVIEW_EFFORT="${CODEX_REVIEW_EFFORT:-medium}"
 
 usage() {
   echo "usage: review.sh [--paths \"<repo-relative paths>\"] \"<session scope: what changed this session and why>\" [repo ...]" >&2
@@ -250,7 +250,7 @@ cd "${repos[0]}" || { echo "CODEX_ERROR: cannot cd to ${repos[0]}"; exit 1; }
 before="$(snapshot)"
 # --sandbox read-only: codex can read the repos to review, but cannot write, edit,
 # or change git state — a hard guarantee, not just a prompt instruction.
-# -m/-c pin the reviewer to Sol at HIGH reasoning effort: the review must not
+# -m/-c pin the reviewer to Astra at MEDIUM reasoning effort: the review must not
 # silently run on whatever model/effort ~/.codex/config.toml happens to hold
 # (the ChatGPT app's model picker rewrites that config).
 # The prompt goes in via stdin (`-`), not argv: argv has a per-argument size cap
