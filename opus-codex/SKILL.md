@@ -1,14 +1,14 @@
 ---
 name: opus-codex
-description: Software-development-engineer pipeline without Fable — Opus does the thinking, codex (Sol) does the reviewing. Opus (the main loop) plans and writes a near-final spec, an Opus subagent implements it, the planner checks the builder's delta against the spec, the codex-review skill (pinned to Sol at high reasoning effort) runs the pipeline's code review and its findings are triaged and fixed until clean, and if the change is user-facing and the project has an e2e harness (e.g. a browser-e2e skill) an Opus subagent verifies the changed flow in the running app. Use when the user types /opus-codex with a task ("do this /opus-codex", "/opus-codex add X"), or asks for the pipeline on Opus and codex only (no Fable).
+description: Software-development-engineer pipeline without Fable — Opus does the thinking, codex (Astra) does the reviewing. Opus (the main loop) plans and writes a near-final spec, an Opus subagent implements it, the planner checks the builder's delta against the spec, the codex-review skill (pinned to Astra at medium reasoning effort) runs the pipeline's code review and its findings are triaged and fixed until clean, and if the change is user-facing and the project has an e2e harness (e.g. a browser-e2e skill) an Opus subagent verifies the changed flow in the running app. Use when the user types /opus-codex with a task ("do this /opus-codex", "/opus-codex add X"), or asks for the pipeline on Opus and codex only (no Fable).
 user-invocable: true
 ---
 
 # Skill: opus-codex (plan and build with Opus, review with codex)
 
-The engineering loop on a fixed model budget: **Opus and codex's Sol model
-only — Fable is never spawned.** ("Sol" is the reviewer the `codex-review`
-skill pins, at high reasoning effort; the exact model id lives only at the top
+The engineering loop on a fixed model budget: **Opus and codex's Astra model
+only — Fable is never spawned.** ("Astra" is the reviewer the `codex-review`
+skill pins, at medium reasoning effort; the exact model id lives only at the top
 of that skill's `review.sh`.)
 
 1. **Plan** — Opus (the main loop) reads the code and writes a near-final spec.
