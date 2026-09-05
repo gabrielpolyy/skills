@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Link exactly this repository's three skills, replacing its retired links."""
+"""Link this repository's skills, replacing its retired links."""
 
 import argparse
 import os
 from pathlib import Path
 import subprocess
 
-CURRENT = ("low", "high", "scientific")
+CURRENT = ("low", "high", "scientific", "sol-review")
 RETIRED = ("codex-review", "codex-implement", "opus-codex", "fable-codex")
 
 
@@ -52,7 +52,7 @@ def install(repo, destination):
     for name in CURRENT:
         if not (destination / name / "SKILL.md").is_file():
             raise ValueError(f"Installed skill is unreadable: {name}")
-    print(f"Verified low, high, scientific in {destination}")
+    print(f"Verified {', '.join(CURRENT)} in {destination}")
 
 
 def main():

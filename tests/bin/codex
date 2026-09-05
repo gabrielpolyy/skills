@@ -11,6 +11,7 @@
 #   FAKE_CODEX_MODE=sleep   record $$ in $FAKE_CODEX_PID_FILE and sleep forever
 #
 # FAKE_CODEX_PROMPT_FILE, when set, receives the stdin prompt verbatim.
+[ -n "${FAKE_CODEX_ARGS_FILE:-}" ] && printf '%s\n' "$@" > "$FAKE_CODEX_ARGS_FILE"
 out=""
 while [ "$#" -gt 0 ]; do
   case "$1" in

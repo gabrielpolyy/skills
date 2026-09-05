@@ -157,5 +157,16 @@ else
 fi
 
 echo
+echo "sol-review"
+sol_review="$repo_root/sol-review/review.sh"
+args_file="$tmp/sol-args.txt"
+out="$(CODEX_REVIEW_MODEL=gpt-6-astra CODEX_REVIEW_EFFORT=low FAKE_CODEX_ARGS_FILE="$args_file" FAKE_CODEX_PROMPT_FILE="$pf" bash "$sol_review" --paths "a.txt" "Review only the task delta" "$tmp/r1" 2>&1)"
+check "Sol wrapper returns independent review report" eq "$out" "NO_FINDINGS"
+check "Sol wrapper pins model despite inherited override" contains "$(cat "$args_file")" "gpt-5.6-sol"
+check "Sol wrapper pins xhigh despite inherited override" contains "$(cat "$args_file")" "model_reasoning_effort=xhigh"
+check "Sol wrapper enforces read-only sandbox" contains "$(cat "$args_file")" "read-only"
+check "Sol wrapper passes exact delta scope" contains "$(cat "$pf")" "Review only the task delta"
+out="$(bash "$sol_review" --paths "nonexistent.txt" "scope" "$tmp/r1" 2>&1)"
+check "Sol wrapper does not review history when delta is empty" eq "$out" "NO_CHANGES"
 echo "$pass passed, $fail failed"
 [ "$fail" = 0 ]

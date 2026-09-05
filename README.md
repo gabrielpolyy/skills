@@ -1,7 +1,8 @@
 # useful-skills
 
-Three engineering workflows for Claude Code or Codex. Every workflow includes
-planning, usage-based implementation assignment, and independent review.
+Three engineering workflows and a standalone review skill for Claude Code or
+Codex. Every engineering workflow includes planning, usage-based implementation
+assignment, and independent review.
 
 | Skill | Planning | Implementation | Review |
 |---|---|---|---|
@@ -23,6 +24,14 @@ The [selector](scripts/choose-builder.py) consumes fresh normalized observations
 from the agent's available usage surface; it does not query provider accounts.
 See the [input format](shared/usage-format.md) and [shared workflow](shared/workflow.md).
 
+## Standalone Sol review
+
+[`/sol-review`](sol-review/SKILL.md) reviews only the task's delta with **Sol
+xhigh**, in a fresh read-only session. It reports findings without applying
+fixes or starting an implementation loop. The default scope is the task's
+uncommitted changes, including staged changes and new files; unrelated work
+is excluded. An explicitly requested commit range or patch can also be reviewed.
+
 ## Install or update
 
 Keep the entire repository together. From its root, run:
@@ -42,8 +51,9 @@ The default destination is `~/.claude/skills`. To also install for Codex:
 python3 scripts/install.py --skills-dir ~/.codex/skills
 ```
 
-Start a new session to discover `/low`, `/high`, and `/scientific` (in Codex,
-use `$low`, `$high`, or `$scientific`). These replace `codex-review`,
+Start a new session to discover `/low`, `/high`, `/scientific`, and `/sol-review`
+(in Codex, use `$low`, `$high`, `$scientific`, or `$sol-review`). The engineering
+workflows replace `codex-review`,
 `codex-implement`, `opus-codex`, and `fable-codex`; their old invocation names
 are removed. Their Codex execution helpers remain internal scripts.
 
