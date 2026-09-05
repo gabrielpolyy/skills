@@ -69,13 +69,13 @@ class InstallTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             installer.install(self.repo, [self.dest])
         self.assertTrue(os.path.lexists(old))
-        self.assertFalse((self.dest / "low").exists())
+        self.assertFalse((self.dest / "sol-review").exists())
 
     def test_conflict_changes_nothing(self):
-        (self.dest / "scientific").mkdir()
+        (self.dest / "fable-review").mkdir()
         with self.assertRaises(ValueError):
             installer.install(self.repo, [self.dest])
-        self.assertFalse((self.dest / "low").exists())
+        self.assertFalse((self.dest / "sol-review").exists())
 
     def test_unrelated_retired_link_is_preserved(self):
         other = Path(self.temp.name) / "other"
@@ -100,11 +100,11 @@ class InstallTests(unittest.TestCase):
     def test_failing_second_destination_leaves_the_first_untouched(self):
         second = Path(self.temp.name) / "second"
         second.mkdir()
-        (second / "scientific").mkdir()   # unrelated skill: must not be replaced
-        with self.assertRaisesRegex(ValueError, re.escape(str(second / "scientific"))):
+        (second / "fable-review").mkdir()   # unrelated skill: must not be replaced
+        with self.assertRaisesRegex(ValueError, re.escape(str(second / "fable-review"))):
             installer.install(self.repo, [self.dest, second])
         self.assertEqual(os.listdir(self.dest), [])
-        self.assertEqual(os.listdir(second), ["scientific"])
+        self.assertEqual(os.listdir(second), ["fable-review"])
 
     def test_second_destination_that_is_a_file_fails_before_any_change(self):
         second = Path(self.temp.name) / "second"

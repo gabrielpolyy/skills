@@ -1,11 +1,11 @@
 ---
-name: sol-review
-description: Review the requested code delta or supplied audit evidence with an independent Sol xhigh reviewer, reporting findings without fixes. Use for /sol-review or an explicit request for a Sol review.
+name: astra-review
+description: Review the requested code delta or supplied audit evidence with an independent Astra medium reviewer, reporting findings without fixes. Use for /astra-review or an explicit request for a Astra review.
 ---
 
-# Sol review
+# Astra review
 
-Run one fresh, read-only review with **gpt-5.6-sol at xhigh**. The current
+Run one fresh, read-only review with **gpt-6-astra at medium**. The current
 session owns planning, implementation, and testing; this skill delegates only
 review. Return findings without applying fixes or starting a fix/review loop.
 An already-authorized caller may act on the report under its own policy.
@@ -21,7 +21,7 @@ An already-authorized caller may act on the report under its own policy.
    bash "$skill_dir/review.sh" --paths "$changed_paths" "$scope" "$target_repo"
    ```
 
-   The wrapper pins codex, gpt-5.6-sol, and xhigh regardless of inherited
+   The wrapper pins codex, gpt-6-astra, and medium regardless of inherited
    `REVIEW_*` settings. If the user explicitly requests another effort, pass
    `--effort medium`, `--effort high`, or `--effort xhigh`; otherwise use the
    default. Never substitute another model. Requires Bash, Git, and an

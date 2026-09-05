@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Offline tests for scripts/review.sh and scripts/implement.sh.
+# Offline tests for scripts/review.sh.
 # Fake `codex` and `claude` CLIs (tests/bin) are put first on PATH, so nothing
 # here calls a real CLI. Run: bash tests/test.sh
 set -u
@@ -7,7 +7,6 @@ set -u
 here="$(cd "$(dirname "$0")" && pwd)"
 repo_root="$(cd "$here/.." && pwd)"
 review="$repo_root/scripts/review.sh"
-implement="$repo_root/scripts/implement.sh"
 export PATH="$here/bin:$PATH"   # tests/bin/codex and tests/bin/claude are the fakes
 chmod +x "$here/bin/codex" "$here/bin/claude"
 
@@ -246,124 +245,6 @@ check "--range: unresolvable ref -> ERROR" rc_and_contains "$rc" 1 "$out" "canno
 out="$(cd "$tmp/r1" && bash "$review" --range "HEAD~1..HEAD" "scope" "$tmp/r1" "$tmp/r2" 2>&1)"; rc=$?
 check "--range: two repos -> exit 2" eq "$rc" 2
 
-echo "implement.sh"
-spec="$tmp/spec.md"; printf 'Add a line to a.txt\n' > "$spec"
-out="$(cd "$tmp/r1" && bash "$implement" 2>&1)"; rc=$?
-check "no args -> exit 2 with usage" rc_and_contains "$rc" 2 "$out" "usage:"
-: > "$tmp/empty.md"
-out="$(cd "$tmp/r1" && bash "$implement" "$tmp/empty.md" 2>&1)"; rc=$?
-check "empty spec -> exit 2" eq "$rc" 2
-out="$(cd "$tmp/r1" && IMPLEMENT_BACKEND=bogus bash "$implement" "$spec" 2>&1)"; rc=$?
-check "unknown backend -> exit 2" eq "$rc" 2
-out="$(cd "$tmp/notgit" && bash "$implement" "$spec" 2>&1)"
-check "outside git -> NOT_A_GIT_REPO" eq "$out" "NOT_A_GIT_REPO"
-out="$(cd "$tmp/r1" && bash "$implement" "$spec" "$tmp/notgit" 2>&1)"; rc=$?
-check "bogus repo arg -> ERROR" rc_and_contains "$rc" 1 "$out" "not a git repository"
-out="$(cd "$tmp/r1" && IMPLEMENT_DRY_RUN=1 bash "$implement" "$spec" 2>&1)"
-check "dry run embeds the spec" contains "$out" "Add a line to a.txt"
-check "dry run: full codex recipe" contains "$out" "codex exec --sandbox workspace-write -m gpt-6-astra -c model_reasoning_effort=medium -o <tmp> -"
-check "dry run: dependency rule follows the spec" contains "$out" "Add a dependency only when the spec names it"
-check "dry run: no blanket dependency ban" not contains "$out" "no new dependencies"
-out="$(cd "$tmp/r1" && IMPLEMENT_BACKEND=claude IMPLEMENT_MODEL=opus IMPLEMENT_EFFORT=xhigh IMPLEMENT_DRY_RUN=1 bash "$implement" "$spec" 2>&1)"
-check "dry run: full claude recipe" contains "$out" "claude -p --model opus --effort xhigh --permission-mode acceptEdits --no-session-persistence"
-out="$(cd "$tmp/notgit" && IMPLEMENT_DRY_RUN=1 bash "$implement" "$spec" "$tmp/r1" 2>&1)"
-check "explicit repo arg resolves to its root" contains "$out" "cwd=$(toplevel "$tmp/r1")"
-out="$(cd "$tmp/my repo" && IMPLEMENT_DRY_RUN=1 bash "$implement" "$spec" 2>&1)"
-check "space in repo root is shell-quoted in the prompt" contains "$out" "repository at '$(toplevel "$tmp/my repo")'"
-git -C "$tmp/r1" checkout -q -- . && git -C "$tmp/r1" clean -qfd
-out="$(cd "$tmp/r1" && FAKE_CODEX_PROMPT_FILE="$pf" FAKE_CODEX_ARGS_FILE="$af" FAKE_CODEX_MODE=write FAKE_CODEX_TARGET="$tmp/r1/a.txt" bash "$implement" "$spec" 2>&1)"; rc=$?
-check "spec reaches codex on stdin" contains "$(cat "$pf")" "Add a line to a.txt"
-check "run that changed the tree -> SNAPSHOT line first" contains "$(first_line "$out")" "SNAPSHOT: "
-check "run that changed the tree -> report, no warning, exit 0" rc_and_contains "$rc" 0 "$(last_line "$out")" "REPORT"
-check "run that changed the tree -> no warning" not contains "$out" "WARNING"
-check "codex argv: workspace-write sandbox" contains "$(cat "$af")" "sandbox=workspace-write"
-check "codex argv: default model and effort" contains "$(cat "$af")" "gpt-6-astra
--c
-model_reasoning_effort=medium"
-check "codex argv: prompt from stdin (trailing -)" eq "$(last_line "$(cat "$af")")" "-"
-snapf="${out#SNAPSHOT: }"; snapf="$(first_line "$snapf")"
-check "snapshot file records HEAD" contains "$(cat "$snapf")" "### head: $(git -C "$tmp/r1" rev-parse HEAD)"
-check "snapshot file records the pre-run status (clean)" contains "$(cat "$snapf")" "### status
-### unstaged"
-out="$(cd "$tmp/r1" && FAKE_CODEX_MODE=report bash "$implement" "$spec" 2>&1)"; rc=$?
-check "run that changed nothing -> WARNING, exit 3" rc_and_contains "$rc" 3 "$out" "WARNING: no working-tree change"
-out="$(cd "$tmp/r1" && FAKE_CODEX_MODE=run FAKE_CODEX_CMD="echo c >> a.txt && git add a.txt && git -c user.email=t@t -c user.name=t commit -qm oops" bash "$implement" "$spec" 2>&1)"; rc=$?
-check "run that committed -> WARNING HEAD moved, exit 3" rc_and_contains "$rc" 3 "$out" "WARNING: HEAD moved"
-out="$(cd "$tmp/r1" && FAKE_CODEX_MODE=fail bash "$implement" "$spec" 2>&1)"; rc=$?
-check "codex non-zero exit -> ERROR" rc_and_contains "$rc" 1 "$out" "exited 3"
-# claude backend
-out="$(cd "$tmp/r1" && IMPLEMENT_BACKEND=claude FAKE_CLAUDE_PROMPT_FILE="$pf" FAKE_CLAUDE_ARGS_FILE="$af" FAKE_CLAUDE_MODE=run FAKE_CLAUDE_CMD="echo changed >> b.txt" FAKE_CLAUDE_OUTPUT=REPORT bash "$implement" "$spec" 2>&1)"; rc=$?
-check "claude: spec reaches claude on stdin" contains "$(cat "$pf")" "Add a line to a.txt"
-check "claude: report is the final message, exit 0" rc_and_contains "$rc" 0 "$(last_line "$out")" "REPORT"
-args="$(cat "$af")"
-check "claude argv: model and effort defaults" contains "$args" "--model
-fable
---effort
-high"
-check "claude argv: acceptEdits permission mode" contains "$args" "--permission-mode
-acceptEdits"
-check "claude argv: no persistence" contains "$args" "--no-session-persistence"
-check "claude argv: never bypasses permissions" not contains "$args" "bypassPermissions"
-out="$(cd "$tmp/r1" && IMPLEMENT_BACKEND=claude FAKE_CLAUDE_MODE=fail bash "$implement" "$spec" 2>&1)"; rc=$?
-check "claude non-zero exit -> ERROR" rc_and_contains "$rc" 1 "$out" "claude exited 3"
-
-kill_test "implement/codex" "$tmp/child.pid" "$tmp/killed.out" env FAKE_CODEX_MODE=sleep FAKE_CODEX_PID_FILE="$tmp/child.pid" bash "$implement" "$spec" "$tmp/r1"
-kill_test "implement/claude" "$tmp/child.pid" "$tmp/killed.out" env IMPLEMENT_BACKEND=claude FAKE_CLAUDE_MODE=sleep FAKE_CLAUDE_PID_FILE="$tmp/child.pid" bash "$implement" "$spec" "$tmp/r1"
-
-echo "baseline round trip"
-# A: the task restores a pre-existing dirty file to its committed contents.
-mkrepo "$tmp/r3"; echo dirty >> "$tmp/r3/b.txt"
-out="$(cd "$tmp/r3" && IMPLEMENT_SNAPSHOT="$tmp/snapA" FAKE_CODEX_MODE=run FAKE_CODEX_CMD="git checkout -- b.txt" bash "$implement" "$spec" 2>&1)"; rc=$?
-check "IMPLEMENT_SNAPSHOT chooses the snapshot path" eq "$(first_line "$out")" "SNAPSHOT: $tmp/snapA"
-check "snapshot records the pre-existing edit" contains "$(cat "$tmp/snapA")" "+dirty"
-check "restoring a dirty file counts as a change (exit 0)" eq "$rc" 0
-out="$(cd "$tmp/r3" && bash "$review" "scope" 2>&1)"
-check "restored file without --baseline -> NO_CHANGES" eq "$out" "NO_CHANGES"
-out="$(cd "$tmp/r3" && REVIEW_DRY_RUN=1 bash "$review" --baseline "$tmp/snapA" "scope" 2>&1)"
-check "--baseline: prompt embeds the baseline patch" contains "$out" "+dirty"
-check "--baseline: prompt explains the delta is baseline vs current" contains "$out" "DIFFERENCE
-between that baseline and the current state"
-out="$(cd "$tmp/r3" && bash "$review" --baseline "$tmp/snapA" "scope" 2>&1)"
-check "restored file with --baseline -> review runs" eq "$out" "NO_FINDINGS"
-# B: a staged change is cancelled in the working tree.
-mkrepo "$tmp/r4"; echo staged >> "$tmp/r4/a.txt"; git -C "$tmp/r4" add a.txt
-out="$(cd "$tmp/r4" && IMPLEMENT_SNAPSHOT="$tmp/snapB" FAKE_CODEX_MODE=run FAKE_CODEX_CMD="git show HEAD:a.txt > a.txt" bash "$implement" "$spec" 2>&1)"; rc=$?
-check "cancelling a staged change counts as a change (exit 0)" eq "$rc" 0
-out="$(cd "$tmp/r4" && bash "$review" "scope" 2>&1)"
-check "cancelled staged change without --baseline -> NO_CHANGES" eq "$out" "NO_CHANGES"
-out="$(cd "$tmp/r4" && bash "$review" --baseline "$tmp/snapB" "scope" 2>&1)"
-check "cancelled staged change with --baseline -> review runs" eq "$out" "NO_FINDINGS"
-# C: the normal case, and an untouched tree.
-mkrepo "$tmp/r5"
-out="$(cd "$tmp/r5" && IMPLEMENT_SNAPSHOT="$tmp/snapC" FAKE_CODEX_MODE=report bash "$implement" "$spec" 2>&1)"
-out="$(cd "$tmp/r5" && bash "$review" --baseline "$tmp/snapC" "scope" 2>&1)"
-check "untouched tree with --baseline -> NO_CHANGES" eq "$out" "NO_CHANGES"
-echo work >> "$tmp/r5/a.txt"
-out="$(cd "$tmp/r5" && bash "$review" --baseline "$tmp/snapC" --paths "a.txt" "scope" 2>&1)"
-check "normal edit with --baseline and --paths -> review runs" eq "$out" "NO_FINDINGS"
-# D: the snapshot lives INSIDE the repo (untracked, not ignored) and is given as a relative path.
-mkrepo "$tmp/r6"
-out="$(cd "$tmp/r6" && IMPLEMENT_SNAPSHOT="snap.txt" FAKE_CODEX_MODE=report bash "$implement" "$spec" 2>&1)"; rc=$?
-check "in-repo snapshot: SNAPSHOT line names the resolved path" eq "$(first_line "$out")" "SNAPSHOT: $tmp/r6/snap.txt"
-check "in-repo snapshot: unchanged run is still detected (exit 3)" rc_and_contains "$rc" 3 "$out" "WARNING: no working-tree change"
-check "in-repo snapshot: snapshot records HEAD" contains "$(cat "$tmp/r6/snap.txt")" "### head: $(git -C "$tmp/r6" rev-parse HEAD)"
-check "in-repo snapshot: snapshot does not list itself" not contains "$(cat "$tmp/r6/snap.txt")" "snap.txt"
-out="$(cd "$tmp/r6" && bash "$review" --baseline "snap.txt" "scope" 2>&1)"
-check "in-repo snapshot: --baseline on it with no edits -> NO_CHANGES" eq "$out" "NO_CHANGES"
-echo work >> "$tmp/r6/a.txt"
-out="$(cd "$tmp/r6" && REVIEW_BACKEND=claude REVIEW_DRY_RUN=1 bash "$review" --baseline "$tmp/r6/snap.txt" "scope" 2>&1)"
-check "in-repo snapshot: not embedded as an untracked file" not contains "$out" "### untracked file: snap.txt"
-check "in-repo snapshot: prompt tells the reviewer to ignore it" contains "$out" "The snapshot file itself (snap.txt, inside the repo) is not part of the delta"
-out="$(cd "$tmp/r6" && bash "$review" --baseline "$tmp/r6/snap.txt" "scope" 2>&1)"
-check "in-repo snapshot: a real edit with --baseline -> review runs" eq "$out" "NO_FINDINGS"
-out="$(cd "$tmp/r6" && IMPLEMENT_SNAPSHOT="$tmp/r6/snap.txt" FAKE_CODEX_MODE=write FAKE_CODEX_TARGET="$tmp/r6/b.txt" bash "$implement" "$spec" 2>&1)"; rc=$?
-check "in-repo snapshot: rerun over the old snapshot succeeds (exit 0)" rc_and_contains "$rc" 0 "$(last_line "$out")" "REPORT"
-check "in-repo snapshot: rerun snapshot does not list itself" not contains "$(cat "$tmp/r6/snap.txt")" "snap.txt"
-check "in-repo snapshot: rerun snapshot records the earlier edit" contains "$(cat "$tmp/r6/snap.txt")" "+work"
-out="$(cd "$tmp/r6" && IMPLEMENT_SNAPSHOT="$tmp/nodir/snap.txt" FAKE_CODEX_MODE=report bash "$implement" "$spec" 2>&1)"; rc=$?
-check "snapshot in a missing directory -> ERROR, exit 1" rc_and_contains "$rc" 1 "$out" "ERROR: snapshot directory does not exist"
-
-echo
 echo "sol-review"
 sol_review="$repo_root/sol-review/review.sh"
 args_file="$tmp/sol-args.txt"
@@ -378,5 +259,58 @@ out="$(bash "$sol_review" --paths "nonexistent.txt" "scope" "$tmp/r1" 2>&1)"
 check "Sol wrapper does not review history when delta is empty" eq "$out" "NO_CHANGES"
 out="$(bash "$sol_review" --range "HEAD~1..HEAD" "scope" "$tmp/r1" 2>&1)"
 check "Sol wrapper passes --range through" contains "$(first_line "$out")" "RANGE: "
+
+echo "astra-review and fable-review"
+ast="${repo_root}/astra-review/review.sh"; fab="${repo_root}/fable-review/review.sh"
+out="$(REVIEW_BACKEND=claude REVIEW_MODEL=opus REVIEW_EFFORT=xhigh FAKE_CODEX_ARGS_FILE="$af" bash "$ast" --paths "a.txt" "scope" "$tmp/r1" 2>&1)"
+check "Astra wrapper returns report" eq "$out" "NO_FINDINGS"
+check "Astra wrapper pins Codex/Astra" contains "$(cat "$af")" "gpt-6-astra"
+check "Astra default medium ignores inherited effort" contains "$(cat "$af")" "model_reasoning_effort=medium"
+out="$(FAKE_CODEX_ARGS_FILE="$af" bash "$ast" --effort high --paths "a.txt" "scope" "$tmp/r1" 2>&1)"
+check "explicit Astra high override" contains "$(cat "$af")" "model_reasoning_effort=high"
+out="$(REVIEW_BACKEND=codex REVIEW_MODEL=gpt-5.6-sol REVIEW_EFFORT=medium FAKE_CLAUDE_ARGS_FILE="$af" bash "$fab" --paths "a.txt" "scope" "$tmp/r1" 2>&1)"
+check "Fable wrapper returns report" eq "$out" "NO_FINDINGS"
+check "Fable wrapper pins model" contains "$(cat "$af")" "--model
+fable"
+check "Fable default high ignores inherited effort" contains "$(cat "$af")" "--effort
+high"
+out="$(FAKE_CLAUDE_ARGS_FILE="$af" bash "$fab" --paths "a.txt" --effort xhigh "scope" "$tmp/r1" 2>&1)"
+check "explicit Fable xhigh override" contains "$(cat "$af")" "--effort
+xhigh"
+out="$(bash "$ast" --effort bogus "scope" "$tmp/r1" 2>&1)"; rc=$?
+check "invalid effort fails before CLI" eq "$rc" 2
+
+# Wrappers work when the skill directory itself is installed as a link.
+mkdir -p "$tmp/skills"
+ln -s "$repo_root/astra-review" "$tmp/skills/astra-review"
+out="$(bash "$tmp/skills/astra-review/review.sh" --paths "a.txt" "scope" "$tmp/r1" 2>&1)"
+check "installed symlink resolves shared helper" eq "$out" "NO_FINDINGS"
+
+echo "evidence-only review"
+evidence_file="$tmp/audit evidence.txt"
+printf 'Claim: the latency improved. Observed p95: 40ms before, 20ms after.\n' > "$evidence_file"
+for wrapper in "$ast" "$fab"; do
+  out="$(FAKE_CODEX_PROMPT_FILE="$pf" FAKE_CLAUDE_PROMPT_FILE="$pf" bash "$wrapper" --evidence "$evidence_file" "Check the latency conclusion" "$tmp/r2" 2>&1)"
+  check "evidence in clean repo runs reviewer: $wrapper" eq "$out" "NO_FINDINGS"
+  check "supplied evidence reaches reviewer: $wrapper" contains "$(cat "$pf")" "Observed p95: 40ms before, 20ms after"
+  check "evidence review has no diff instruction: $wrapper" not contains "$(cat "$pf")" "diff HEAD"
+  check "evidence review is scoped: $wrapper" contains "$(cat "$pf")" "Check the latency conclusion"
+done
+# Unrelated dirty data must not be embedded by Claude's evidence mode.
+echo unrelated > "$tmp/r2/private-task.txt"
+out="$(FAKE_CLAUDE_PROMPT_FILE="$pf" bash "$fab" --evidence "$evidence_file" "scope" "$tmp/r2" 2>&1)"
+check "evidence review excludes unrelated working-tree content" not contains "$(cat "$pf")" "private-task.txt"
+out="$(FAKE_CODEX_MODE=fail bash "$ast" --evidence "$evidence_file" "scope" "$tmp/r2" 2>&1)"; rc=$?
+check "evidence CLI failure is not a clean review" rc_and_contains "$rc" 1 "$out" "ERROR:"
+for option in '--paths a.txt' '--range HEAD..HEAD'; do
+  out="$(bash "$ast" --evidence "$evidence_file" $option "scope" "$tmp/r2" 2>&1)"; rc=$?
+  check "evidence excludes $option" eq "$rc" 2
+done
+out="$(bash "$ast" --evidence "$tmp/missing-evidence" "scope" "$tmp/r2" 2>&1)"; rc=$?
+check "missing evidence rejected" eq "$rc" 2
+printf '  \n' > "$tmp/empty-evidence"
+out="$(bash "$ast" --evidence "$tmp/empty-evidence" "scope" "$tmp/r2" 2>&1)"; rc=$?
+check "blank evidence rejected" eq "$rc" 2
+
 echo "$pass passed, $fail failed"
 [ "$fail" = 0 ]

@@ -1,105 +1,65 @@
 # useful-skills
 
-Three engineering workflows and a standalone review skill for Claude Code or
-Codex. Every engineering workflow includes planning, usage-based implementation
-assignment, and independent review. A workflow runs only when you type its
-slash command or ask for it by name; nothing triggers on topic alone.
+Three independent review skills for Codex and Claude Code. Work in your chosen
+session model to plan, implement, and test, then invoke a reviewer when ready.
+There are no implementation workflows, planner agents, or quota selectors.
 
-| Skill | Planning | Implementation | Review |
-|---|---|---|---|
-| [`/low`](low/SKILL.md) | Sol or Opus **xhigh** | Sol or Opus **xhigh** | Prefer the other model, **xhigh** |
-| [`/high`](high/SKILL.md) | Astra **medium** or Fable **high** | Sol or Opus **xhigh** | Prefer the model not used for planning: Astra **medium** or Fable **high** |
-| [`/scientific`](scientific/SKILL.md) | Astra **high** + Fable **xhigh** | Astra **medium** or Fable **high** | The other model, at those same implementation efforts |
+| Skill | Reviewer | Default effort |
+|---|---|---|
+| [`sol-review`](sol-review/SKILL.md) | `gpt-5.6-sol` via Codex | xhigh |
+| [`astra-review`](astra-review/SKILL.md) | `gpt-6-astra` via Codex | medium |
+| [`fable-review`](fable-review/SKILL.md) | `fable` via Claude Code | high |
 
-Scientific must be orchestrated from a Fable or Astra session and stops
-otherwise; the other levels can be coordinated from any model.
+For a second model's perspective, use Fable review after Astra work, Astra
+review after Fable work, or Sol review after Opus work. Explicit effort
+requests override the default: for example, work in Astra high and request
+`fable-review at xhigh`, or work in Fable xhigh and request
+`astra-review at high`. The caller's model and effort remain unchanged.
 
-Use low for routine bounded changes, high for substantial features and contract
-changes, and scientific for uncertain methods requiring experiments. Scientific
-planning includes a baseline, hypotheses, and measurable acceptance criteria;
-its builder leaves a results record (commands, seeds, data provenance, metrics,
-environment, wall time), and its reviewer reproduces the critical experiment in
-a scratch worktree before judging the method, code, and evidence.
-
-For an explicitly review-only task, `/high` uses just a fresh Astra medium or
-Fable high reviewer for the supplied PR/delta or audit evidence, without
-planning an implementation, building, or applying fixes. Normal `/high`
-implementation tasks retain the full pipeline above.
-
-Before implementation, the [usage fetcher](scripts/fetch-usage.py) reads each
-CLI's own usage endpoint and the [selector](scripts/choose-builder.py) picks
-the eligible model with the most remaining quota, accounting for shared and
-model caps and a reserve for review/fixes:
-
-```sh
-python3 scripts/fetch-usage.py --reserve 10 --choose high
-```
-
-`--choose planner` ranks Astra and Fable the same way for the `/high` planner.
-A CLI missing from PATH marks its models unavailable. A provider whose quota
-cannot be read is omitted and reported as unknown, and the selection is a
-disclosed fallback instead of an invented comparison. Hand-written
-observations in the [input format](shared/usage-format.md) are the fallback
-input. See the [shared workflow](shared/workflow.md).
-
-## Standalone Sol review
-
-[`/sol-review`](sol-review/SKILL.md) reviews only the task's delta with **Sol
-xhigh**, in a fresh read-only session. It reports findings without applying
-fixes or starting an implementation loop. The default scope is the task's
-uncommitted changes, including staged changes and new files; unrelated work
-is excluded. A commit range is reviewed with `--range <base>..<head>`.
+Reviews produce findings only and run in fresh read-only sessions. They do
+not implement fixes, launch another workflow, or publish anything. Code review
+covers the requested delta, including staged changes and new files; audit
+review can check supplied evidence even with no code changes. Reviewers read
+existing test results; they do not independently reproduce experiments.
 
 ## Install or update
 
-Keep the entire repository together. From its root, run:
+Keep this repository together and run:
 
 ```sh
 python3 scripts/install.py
 ```
 
-One command installs for both CLIs: it links every skill into
-`~/.claude/skills` and `~/.codex/skills`, creating either directory if missing.
-On Windows use `python scripts/install.py` (or `py -3`). The installer creates
-directory junctions there and symlinks on macOS/Linux. It replaces only retired
-links pointing into this repository, even when their targets are already gone,
-and refuses to overwrite unrelated skills; every destination is checked before
-any is changed. It is safe to rerun after `git pull --ff-only`.
+On Windows use `python scripts/install.py` (or `py -3`). The installer links
+all three skills into both `~/.claude/skills` and `~/.codex/skills`, using
+symlinks on macOS/Linux and directory junctions on Windows. Rerun after
+`git pull --ff-only`. It removes retired links owned by this repository
+(`low`, `high`, `scientific`, `hard`, `codex-review`, `codex-implement`,
+`opus-codex`, `fable-codex`) and refuses to overwrite unrelated skills.
 
-For a custom or single destination, pass `--skills-dir` (repeatable). Only the
-listed directories are then used:
+For custom destinations, repeat `--skills-dir DIR`. Start a new session to
+refresh skill discovery. Invoke `/sol-review`, `/astra-review`, or
+`/fable-review` in Claude Code; use `$sol-review`, `$astra-review`, or
+`$fable-review` in Codex. Each skill requires Bash, Git, and its reviewer's
+CLI installed and logged in. On Windows use Git Bash for the review helpers.
+
+## Helper usage
 
 ```sh
-python3 scripts/install.py --skills-dir ~/.codex/skills
+bash astra-review/review.sh --paths "src/app.ts tests/app.test.ts" "Scope and test results" /path/to/repo
+bash fable-review/review.sh --effort xhigh --range BASE..HEAD "Committed task scope" /path/to/repo
+bash astra-review/review.sh --evidence /path/to/audit.txt "Check these conclusions" /path/to/repo
 ```
 
-Start a new session from inside the target project. In Claude Code type `/low`,
-`/high`, `/scientific`, or `/sol-review`; in Codex type `$low`, `$high`,
-`$scientific`, or `$sol-review`. The engineering workflows replace
-`codex-review`, `codex-implement`, `opus-codex`, and `fable-codex`; their old
-invocation names are removed.
-
-`high` and `scientific` need both the `codex` and `claude` CLIs installed and
-logged in on the machine where the skill is invoked, whichever CLI starts the
-workflow, because roles are dispatched through the other CLI. If either is
-missing, `scientific` stops with review pending and `high` falls back to the
-planning model with a disclosed note. `low` needs both for cross-model review
-but may fall back to same-model review; `sol-review` needs `codex` only. The
-coordinating session can run any model in either CLI, except that scientific
-requires a Fable or Astra orchestrator. Every role is dispatched
-as a separate process with model and effort pinned, so the session model only
-affects which provider's quota pays for coordination and never substitutes for
-a role, even when it matches the role's model. Missing model access is reported
-rather than silently substituted. The shared helpers in `scripts/` run either
-CLI (`IMPLEMENT_BACKEND` / `REVIEW_BACKEND` set to `codex` or `claude`), write
-a baseline snapshot before building, and review against it with `--baseline`.
-They need Bash and Git (Git Bash on Windows, not the WSL launcher); the
-fetcher, selector, and installer need Python 3. The helpers preserve existing
-permissions.
+`--evidence` reviews supplied claims and evidence without requiring a diff.
+To review code and audit conclusions together, use delta mode and include
+both in the scope. `--paths` accepts whitespace-separated pathspecs; for
+filenames containing spaces, omit it and specify exact files in the scope.
+Legacy pre-task snapshots remain accepted via `--baseline`.
 
 ## Checks
 
-These use temporary repositories and fake CLIs; they do not consume model quota:
+These run against temporary repositories and fake CLIs without model quota:
 
 ```sh
 bash tests/test.sh

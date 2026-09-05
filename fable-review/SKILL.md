@@ -1,11 +1,11 @@
 ---
-name: sol-review
-description: Review the requested code delta or supplied audit evidence with an independent Sol xhigh reviewer, reporting findings without fixes. Use for /sol-review or an explicit request for a Sol review.
+name: fable-review
+description: Review the requested code delta or supplied audit evidence with an independent Fable high reviewer, reporting findings without fixes. Use for /fable-review or an explicit request for a Fable review.
 ---
 
-# Sol review
+# Fable review
 
-Run one fresh, read-only review with **gpt-5.6-sol at xhigh**. The current
+Run one fresh, read-only review with **fable at high**. The current
 session owns planning, implementation, and testing; this skill delegates only
 review. Return findings without applying fixes or starting a fix/review loop.
 An already-authorized caller may act on the report under its own policy.
@@ -21,11 +21,11 @@ An already-authorized caller may act on the report under its own policy.
    bash "$skill_dir/review.sh" --paths "$changed_paths" "$scope" "$target_repo"
    ```
 
-   The wrapper pins codex, gpt-5.6-sol, and xhigh regardless of inherited
+   The wrapper pins claude, fable, and high regardless of inherited
    `REVIEW_*` settings. If the user explicitly requests another effort, pass
    `--effort medium`, `--effort high`, or `--effort xhigh`; otherwise use the
    default. Never substitute another model. Requires Bash, Git, and an
-   authenticated `codex` CLI. Keep the repository together: the wrapper
+   authenticated `claude` CLI. Keep the repository together: the wrapper
    depends on `../scripts/review.sh`.
 
    `--paths` is whitespace-separated; for filenames containing whitespace,

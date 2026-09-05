@@ -6,8 +6,9 @@ import os
 from pathlib import Path
 import subprocess
 
-CURRENT = ("low", "high", "scientific", "sol-review")
-RETIRED = ("codex-review", "codex-implement", "opus-codex", "fable-codex")
+CURRENT = ("sol-review", "astra-review", "fable-review")
+RETIRED = ("codex-review", "codex-implement", "opus-codex", "fable-codex",
+           "low", "high", "scientific", "hard")
 
 
 def default_destinations():
