@@ -38,6 +38,45 @@ class ReviewTests(unittest.TestCase):
                                *args, "Review requested source", self.repo.as_posix()],
                               env=env or self.env, capture_output=True, text=True, timeout=15)
 
+    def test_context_repositories_do_not_expand_targets(self):
+        self.commit_base()
+        related = self.folder / "related repo"
+        related.mkdir()
+        subprocess.run(["git", "init", "-q", str(related)], check=True)
+        (related / "private-change.txt").write_text("UNRELATED_DELTA_MARKER")
+        evidence = self.folder / "evidence.txt"
+        evidence.write_text("Check supplied claim")
+        args_file = self.folder / "args.txt"
+        env = dict(self.env, FAKE_CLAUDE_ARGS_FILE=str(args_file))
+        for backend in ("fable", "astra", "sol"):
+            r = self.review("--context-repo", str(related), backend=backend)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(r.stdout, "NO_CHANGES\n")
+            for mode in (("--audit", "--paths", "a.txt"),
+                         ("--evidence", str(evidence)),
+                         ("--range", "HEAD..HEAD"), ()):
+                (self.repo / "a.txt").write_text("changed\n")
+                run_env = dict(env, REVIEW_DRY_RUN="1") if "--range" in mode else env
+                r = self.review("--context-repo", str(related),
+                                "--context-repo", str(related), *mode,
+                                backend=backend, env=run_env)
+                self.assertEqual(r.returncode, 0, r.stderr)
+                prompt = r.stdout if "--range" in mode else self.prompt.read_text()
+                self.assertIn(str(related), prompt)
+                self.assertNotIn("UNRELATED_DELTA_MARKER", prompt)
+                if backend == "fable" and "--range" not in mode:
+                    argv = args_file.read_text().splitlines()
+                    self.assertIn("--add-dir", argv)
+                    self.assertEqual(argv.count(str(related)), 1)
+            (self.repo / "a.txt").write_text("base\n")
+
+    def test_invalid_context_repository_fails_before_cli(self):
+        self.commit_base()
+        r = self.review("--context-repo", str(self.folder / "missing"))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("ERROR:", r.stdout)
+        self.assertFalse(self.prompt.exists())
+
     def test_canceled_staged_change_is_reviewed_by_both_backends(self):
         self.commit_base()
         (self.repo / "a.txt").write_text("staged\n")

@@ -61,6 +61,7 @@ esac
 usage() {
   echo "usage: review.sh [--paths \"<repo-relative paths>\"] [--baseline <snapshot-file> | --range <base>..<head>] \"<session scope: what changed this session and why>\" [repo ...]" >&2
   echo "  the scope argument is required; it tells the reviewer which changes to review." >&2
+  echo "  --context-repo <repo> adds reference context only; repeat for multiple repositories." >&2
   echo "  --paths restricts the diff to those pathspecs (whitespace-separated, non-empty)." >&2
   echo "  --baseline compares against the pre-task snapshot instead of HEAD." >&2
   echo "  --range reviews a committed range in one repo (empty ranges are skipped)." >&2
@@ -72,9 +73,12 @@ usage() {
 }
 
 # Options may appear in any order before the scope.
-have_paths=0; paths=(); baseline=""; range=""; evidence=""; audit=0
+have_paths=0; paths=(); baseline=""; range=""; evidence=""; audit=0; context_args=(); context_repos=()
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --context-repo)
+      [ "$#" -ge 2 ] && [ -n "$2" ] || usage
+      context_args+=("$2"); shift 2 ;;
     --audit) audit=1; shift ;;
     --effort)
       [ "$#" -ge 2 ] || usage
@@ -128,6 +132,22 @@ else
   done
 fi
 multi=0; [ "${#repos[@]}" -gt 1 ] && multi=1
+
+# Context roots are readable references, not additional review targets.
+for p in ${context_args[@]+"${context_args[@]}"}; do
+  rt="$(git -C "$p" rev-parse --show-toplevel 2>/dev/null)"
+  if [ -z "$rt" ]; then echo "ERROR: not a context git repository: $p"; exit 1; fi
+  dup=0
+  for e in "${repos[@]}" ${context_repos[@]+"${context_repos[@]}"}; do
+    [ "$e" = "$rt" ] && { dup=1; break; }
+  done
+  [ "$dup" = 0 ] && context_repos+=("$rt")
+done
+# Claude needs explicit access to roots outside its initial working directory.
+claude_dirs=()
+for p in "${repos[@]}" ${context_repos[@]+"${context_repos[@]}"}; do
+  claude_dirs+=(--add-dir "$p")
+done
 
 # A committed range applies to exactly one repo; resolve both ends to object IDs
 # now so the prompt (and the RANGE: line) name an exact, immutable delta.
@@ -315,7 +335,8 @@ if [ "$have_paths" = 1 ]; then
   paths_rule="
 ONLY these paths are in scope (relative to each repo root):${pathspec# --}
 Any other uncommitted change in the working tree is unrelated work from outside this session — do NOT
-review it, do NOT report on it. Diff and inspect only the paths above."
+review it, do NOT report on it. Diff only the paths above; supporting files may be read
+to verify in-scope behavior and cross-repo contracts."
 fi
 
 baseline_rule=""
@@ -454,6 +475,25 @@ Scope and criteria:
 $context"
 fi
 
+# Apply context access consistently to delta, range, source and evidence reviews.
+prompt+="
+
+Supporting context:
+You may inspect relevant surrounding source and accessible related repositories when needed
+to verify an in-scope issue, including callers, consumers, schemas and shared contracts.
+Path filters limit review targets, not supporting reads. Follow concrete dependency references;
+do not audit unrelated code or read credentials, environment secrets or unrelated private data.
+Investigate accessible context before raising verification questions. Cite the supporting path
+and revision when relevant; do not assume another repository's working tree is deployed or matches
+a reviewed historical revision. If necessary context is inaccessible, report the exact missing
+path or evidence and its impact rather than inventing a defect or claiming full verification.
+Additional reference repositories (their changes are NOT review targets):"
+if [ "${#context_repos[@]}" -gt 0 ]; then
+  prompt+=$'\n'"$(printf '%s\n' "${context_repos[@]}")"
+else
+  prompt+=$'\n'"None explicitly supplied; use relevant accessible context identified by the scope or source."
+fi
+
 # The exact CLI recipe per backend. The prompt goes in via stdin, not argv: argv
 # has a per-argument size cap on Linux, and Git Bash on Windows mangles non-ASCII
 # argv when spawning a native exe, while a pipe carries raw UTF-8 intact.
@@ -464,7 +504,7 @@ fi
 recipe() {
   case "$REVIEW_BACKEND" in
     codex)  printf '%s' "codex exec --sandbox read-only -m $REVIEW_MODEL -c model_reasoning_effort=$REVIEW_EFFORT -o <tmp> -" ;;
-    claude) printf '%s' "claude -p --model $REVIEW_MODEL --effort $REVIEW_EFFORT --tools Read,Glob,Grep --strict-mcp-config --no-session-persistence" ;;
+    claude) printf '%s' "claude -p --model $REVIEW_MODEL --effort $REVIEW_EFFORT --tools Read,Glob,Grep --strict-mcp-config --no-session-persistence"; printf ' %q' "${claude_dirs[@]}" ;;
   esac
 }
 
@@ -551,7 +591,7 @@ case "$REVIEW_BACKEND" in
   claude)
     # claude -p prints the final message on stdout; that is the report.
     printf '%s' "$prompt" | claude -p --model "$REVIEW_MODEL" --effort "$REVIEW_EFFORT" \
-      --tools Read,Glob,Grep --strict-mcp-config --no-session-persistence >"$out" 2>"$log" &
+      --tools Read,Glob,Grep --strict-mcp-config --no-session-persistence "${claude_dirs[@]}" >"$out" 2>"$log" &
     ;;
 esac
 child_pid=$!

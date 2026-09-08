@@ -110,6 +110,25 @@ missing input or capability. The loop does not authorize unrelated edits,
 destructive actions, publishing, deployment, or commits; request input only
 when actually required to proceed within the user's scope.
 
+## Broader context and cross-repository access
+
+The reviewer may read relevant supporting code beyond the selected paths and
+across accessible related repositories in every review mode. Before invoking
+it, identify known producers, consumers, schemas and shared contracts; provide
+absolute repository paths and explain their relationship in the scope. Add
+`--context-repo "$related_repo"` (repeatable) for reference-only repositories;
+keep positional roots for repositories whose changes/source are review targets.
+This option also works with `--range`, `--audit`, and `--evidence`.
+
+Have the reviewer investigate accessible dependencies before raising verification
+questions. If it discovers missing context, locate it within existing access,
+then rerun with the relevant context roots or sanitized source evidence. Ask the
+user only for information or access that cannot be obtained autonomously. Keep
+reads relevant and read-only, preserve the disclosure/isolation rule in step 1,
+and never broaden an isolated review back to a secret-bearing original workspace.
+Reference access does not expand fix scope. Record unavailable evidence and
+revision/deployment uncertainty explicitly; do not treat them as proven bugs.
+
 ## Whole-repository source review
 
 For an explicit review of existing code (including a clean tree), use

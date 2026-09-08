@@ -69,6 +69,12 @@ both in the scope. `--paths` accepts whitespace-separated pathspecs; for
 filenames containing spaces, omit it and specify exact files in the scope.
 Legacy pre-task snapshots remain accepted via `--baseline`.
 
+All three reviewers may inspect relevant supporting code across repositories.
+Use repeatable `--context-repo /path/to/related-repo` options to supply reference
+repositories without reviewing their changes. This works in every mode,
+including committed ranges. Positional repository arguments remain review
+targets; `--paths` limits findings/diffs, not supporting context reads.
+
 Staged and unstaged patches are kept separately, even when they cancel in the
 working copy. Empty working-tree selections and committed ranges return
 `NO_CHANGES`. Git collection errors stop before the reviewer is called.
