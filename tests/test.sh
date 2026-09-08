@@ -140,7 +140,7 @@ check "space in repo root is shell-quoted" contains "$out" "git -C '$(toplevel "
 # claude backend embeds the delta instead of gather instructions
 echo new > "$tmp/r1/c.txt"
 out="$(cd "$tmp/r1" && REVIEW_BACKEND=claude REVIEW_DRY_RUN=1 bash "$review" "scope" 2>&1)"
-check "claude dry run: full claude recipe" contains "$out" "claude -p --model fable --effort xhigh --tools Read,Glob,Grep --strict-mcp-config --no-session-persistence"
+check "claude dry run: full claude recipe" contains "$out" "claude -p --model fable --effort high --tools Read,Glob,Grep --strict-mcp-config --no-session-persistence"
 check "claude dry run: embeds the patch" contains "$out" "+edit"
 check "claude dry run: embeds untracked file contents" contains "$out" "### untracked file: c.txt"
 check "claude dry run: no gather-it-yourself block" not contains "$out" "Gather the changes yourself"
@@ -183,7 +183,7 @@ check "claude argv: print mode" contains "$args" "-p"
 check "claude argv: model" contains "$args" "--model
 fable"
 check "claude argv: effort" contains "$args" "--effort
-xhigh"
+high"
 check "claude argv: read-only tools" contains "$args" "--tools
 Read,Glob,Grep"
 check "claude argv: strict mcp + no persistence" contains "$args" "--strict-mcp-config
@@ -272,11 +272,11 @@ out="$(REVIEW_BACKEND=codex REVIEW_MODEL=gpt-5.6-sol REVIEW_EFFORT=medium FAKE_C
 check "Fable wrapper returns report" eq "$out" "NO_FINDINGS"
 check "Fable wrapper pins model" contains "$(cat "$af")" "--model
 fable"
-check "Fable default xhigh ignores inherited effort" contains "$(cat "$af")" "--effort
-xhigh"
-out="$(FAKE_CLAUDE_ARGS_FILE="$af" bash "$fab" --paths "a.txt" --effort high "scope" "$tmp/r1" 2>&1)"
-check "explicit Fable high override" contains "$(cat "$af")" "--effort
+check "Fable default high ignores inherited effort" contains "$(cat "$af")" "--effort
 high"
+out="$(FAKE_CLAUDE_ARGS_FILE="$af" bash "$fab" --paths "a.txt" --effort xhigh "scope" "$tmp/r1" 2>&1)"
+check "explicit Fable xhigh override" contains "$(cat "$af")" "--effort
+xhigh"
 out="$(bash "$ast" --effort bogus "scope" "$tmp/r1" 2>&1)"; rc=$?
 check "invalid effort fails before CLI" eq "$rc" 2
 

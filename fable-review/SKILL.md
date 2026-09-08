@@ -1,11 +1,11 @@
 ---
 name: fable-review
-description: Review a code delta, existing repository source, or supplied audit evidence with an independent Fable xhigh reviewer, autonomously fixing valid findings and re-reviewing until every finding is fixed or discarded with evidence. Use for /fable-review or an explicit request for a Fable review.
+description: Review a code delta, existing repository source, or supplied audit evidence with an independent Fable high reviewer, autonomously fixing valid findings and re-reviewing until every finding is fixed or discarded with evidence. Use for /fable-review or an explicit request for a Fable review.
 ---
 
 # Fable review
 
-Run an autonomous review–fix–test loop using **fable at xhigh** for each
+Run an autonomous review–fix–test loop using **fable at high** for each
 fresh, read-only review. The current session owns investigation, fixes and
 testing; the reviewer only reports findings. Invoking this skill authorizes
 in-scope local corrections without asking the user to approve each finding or
@@ -37,7 +37,7 @@ honor that narrower request instead.
    bash "$skill_dir/review.sh" --paths "$changed_paths" "$scope" "$target_repo"
    ```
 
-   The wrapper pins claude, fable, and xhigh regardless of inherited
+   The wrapper pins claude, fable, and high regardless of inherited
    `REVIEW_*` settings. If the user explicitly requests another effort, pass
    `--effort medium`, `--effort high`, or `--effort xhigh`; otherwise use the
    default. Never substitute another model. Requires Bash, Git, and an

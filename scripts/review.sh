@@ -54,7 +54,7 @@ set -uo pipefail
 REVIEW_BACKEND="${REVIEW_BACKEND:-codex}"
 case "$REVIEW_BACKEND" in
   codex)  : "${REVIEW_MODEL:=gpt-6-astra}"; : "${REVIEW_EFFORT:=high}" ;;
-  claude) : "${REVIEW_MODEL:=fable}";       : "${REVIEW_EFFORT:=xhigh}" ;;
+  claude) : "${REVIEW_MODEL:=fable}";       : "${REVIEW_EFFORT:=high}" ;;
   *) echo "usage: REVIEW_BACKEND must be codex or claude (got '$REVIEW_BACKEND')" >&2; exit 2 ;;
 esac
 

@@ -8,12 +8,12 @@ The calling session handles fixes and tests; each independent reviewer stays rea
 |---|---|---|
 | [`sol-review`](sol-review/SKILL.md) | `gpt-5.6-sol` via Codex | xhigh |
 | [`astra-review`](astra-review/SKILL.md) | `gpt-6-astra` via Codex | high |
-| [`fable-review`](fable-review/SKILL.md) | `fable` via Claude Code | xhigh |
+| [`fable-review`](fable-review/SKILL.md) | `fable` via Claude Code | high |
 
 For a second model's perspective, use Fable review after Astra work, Astra
 review after Fable work, or Sol review after Opus work. Explicit effort
 requests override the default: for example, work in Astra high and request
-`fable-review at high`, or work in Fable xhigh and request
+`fable-review at xhigh`, or work in Fable high and request
 `astra-review at medium`. The caller's model and effort remain unchanged.
 
 Each skill runs an autonomous review–fix–test loop by default. The calling
