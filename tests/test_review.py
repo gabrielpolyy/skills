@@ -62,12 +62,12 @@ class ReviewTests(unittest.TestCase):
                                 backend=backend, env=run_env)
                 self.assertEqual(r.returncode, 0, r.stderr)
                 prompt = r.stdout if "--range" in mode else self.prompt.read_text()
-                self.assertIn(str(related), prompt)
+                self.assertIn(related.as_posix(), prompt)
                 self.assertNotIn("UNRELATED_DELTA_MARKER", prompt)
                 if backend == "fable" and "--range" not in mode:
                     argv = args_file.read_text().splitlines()
                     self.assertIn("--add-dir", argv)
-                    self.assertEqual(argv.count(str(related)), 1)
+                    self.assertEqual(argv.count(related.as_posix()), 1)
             (self.repo / "a.txt").write_text("base\n")
 
     def test_invalid_context_repository_fails_before_cli(self):
