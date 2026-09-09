@@ -38,7 +38,7 @@ xcodebuild -exportArchive -archivePath "$ARCHIVE" \
 
 Use `-workspace` instead of `-project` where appropriate. Keep artifacts/logs in an ignored build directory. With current Xcode, export options for direct upload are `method: app-store-connect`, `destination: upload`, `signingStyle: automatic`, the project `teamID`, `uploadSymbols: true`, and **`manageAppVersionAndBuildNumber: false`** to preserve the chosen numbers. Check `xcodebuild -help` for the installed version. Do not enable `testFlightInternalTestingOnly` for an App Store candidate.
 
-Inspect the archive's bundle ID/version/build before upload. Automatic export may use cloud-managed signing; absence of a local Apple Distribution identity alone does not prove uploading is blocked. If signing fails, diagnose the actual error; never revoke working certificates as a routine retry.
+Inspect the archive's bundle ID/version/build before upload. Automatic export may use cloud-managed signing; absence of a local Apple Distribution identity alone does not prove uploading is blocked. If API-key export fails with `Cloud signing permission error`, an already signed-in Xcode account may have the required access: retry the export with `-allowProvisioningUpdates` but omit all three `-authenticationKey*` flags. This worked with Xcode 26.6; the API key still handled metadata and build attachment. Diagnose actual signing errors; never revoke working certificates as a routine retry.
 
 ## Verify and finish
 
