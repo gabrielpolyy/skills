@@ -4,15 +4,17 @@ import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILLS = ("sol-review", "astra-review", "fable-review")
+REVIEW_SKILLS = ("sol-review", "astra-review", "fable-review")
+SKILLS = (*REVIEW_SKILLS, "app-store-release")
 
 class SkillFileTests(unittest.TestCase):
-    def test_only_review_skills_are_discoverable(self):
+    def test_expected_skills_are_discoverable(self):
         self.assertEqual(sorted(p.parent.name for p in ROOT.glob("*/SKILL.md")), sorted(SKILLS))
         for skill in SKILLS:
             text = (ROOT / skill / "SKILL.md").read_text()
             self.assertTrue(text.startswith(f"---\nname: {skill}\ndescription: "))
-            self.assertIn(f"/{skill}", text.split("---", 2)[1])
+            if skill in REVIEW_SKILLS:
+                self.assertIn(f"/{skill}", text.split("---", 2)[1])
 
     def test_relative_links_resolve(self):
         for path in [ROOT / skill / "SKILL.md" for skill in SKILLS] + [ROOT / "README.md"]:

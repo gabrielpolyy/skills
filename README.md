@@ -1,6 +1,15 @@
 # useful-skills
 
-Three independent review skills for Codex and Claude Code. Work in your chosen
+Reusable skills for Codex and Claude Code, including App Store releases and
+three independent reviewers.
+
+[`app-store-release`](app-store-release/SKILL.md) prepares iOS version/build
+bumps, pushes Fastlane metadata, archives and uploads with Xcode, and attaches
+the processed build in App Store Connect. It discovers each project's own
+configuration and credentials. Invoke `$app-store-release` in Codex or
+`/app-store-release` in Claude Code.
+
+For code reviews, work in your chosen
 session model to plan, implement, and test, then invoke a reviewer when ready.
 The calling session handles fixes and tests; each independent reviewer stays read-only.
 
@@ -42,7 +51,7 @@ python3 scripts/install.py
 ```
 
 On Windows use `python scripts/install.py` (or `py -3`). The installer links
-all three skills into both `~/.claude/skills` and `~/.codex/skills`, using
+all skills into both `~/.claude/skills` and `~/.codex/skills`, using
 symlinks on macOS/Linux and directory junctions on Windows. Rerun after
 `git pull --ff-only`. It removes retired links owned by this repository
 (`low`, `high`, `scientific`, `hard`, `codex-review`, `codex-implement`,
@@ -51,8 +60,15 @@ symlinks on macOS/Linux and directory junctions on Windows. Rerun after
 For custom destinations, repeat `--skills-dir DIR`. Start a new session to
 refresh skill discovery. Invoke `/sol-review`, `/astra-review`, or
 `/fable-review` in Claude Code; use `$sol-review`, `$astra-review`, or
-`$fable-review` in Codex. Each skill requires Bash, Git, and its reviewer's
+`$fable-review` in Codex. Each review skill requires Bash, Git, and its reviewer's
 CLI installed and logged in. On Windows use Git Bash for the review helpers.
+
+The repository is the canonical source; both installed paths point to it.
+Edit here (or through either link), then commit and `git push`. On another
+machine, run `git pull --ff-only` and `python3 scripts/install.py`. Existing
+links see pulled changes immediately; the installer adds any new skills.
+App Store archives/uploads require macOS with Xcode and the project's signing
+and App Store Connect access.
 
 ## Helper usage
 
