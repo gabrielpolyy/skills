@@ -12,7 +12,8 @@ Read the repository's AGENTS.md/CLAUDE.md, Fastfile, Appfile, Deliverfile, and r
 - Read `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` for the app and any extensions. Query App Store Connect for live/editable versions and uploaded builds before choosing increments. Follow the repo's numbering convention; do not assume the local build number is the latest.
 - Prefer the configured API key. Common env names are `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_PATH`; repositories may store them in gitignored `fastlane/.env.secret`. Load without printing secrets. Resolve the `.p8` path to an **absolute path** for xcodebuild. Never copy credentials into this skill or tracked files.
 - With Bundler/Fastlane, `Spaceship::ConnectAPI::Token.create(key_id:, issuer_id:, filepath:)` authenticates; `App.find(bundle_id)` gets the app. For installed Fastlane 2.230, use `Build.all(app_id: app.id, ...)`, or `get_builds(filter: { app: app.id }, ...).to_models`. Inspect installed method signatures if they differ.
-- Increment version/build consistently, run repo-required build and relevant tests, and inspect release notes. Use the repo's existing metadata unless the task calls for rewriting it.
+- Increment version/build consistently and run repo-required build and relevant tests. Preserve unrelated metadata.
+- For each App Store release, update Fastlane's `fastlane/metadata/<locale>/release_notes.txt` (or the repo's configured equivalent) with brief “What's New” notes: 1–3 short, user-facing bullets based on changes since the last shipped release, including workspace changes that will be in the archive. Inspect the release diff/history; don't reuse stale notes, invent improvements, or include internal implementation details. Keep supported locale notes consistent and verify the uploaded version's “What's New” matches.
 
 ## Create version and push metadata
 
