@@ -9,6 +9,19 @@ Goal: find the interleaving or edge case that code reading misses. The checker e
 
 Runner: `node ~/.claude/skills/tla/bin/mc.mjs spec.mjs` (in Codex: `~/.codex/skills/tla/bin/mc.mjs`). Put specs in the project's `specs/` (commit them) or the scratchpad for a one-off.
 
+## Step 0: Decide whether a model check is needed
+
+The user offers the check; you judge whether it pays off. Skip the skill when any of these holds:
+
+- The question is answered by reading the code: one handler, one path, no concurrency.
+- The flow has no state that persists between calls, or no interleaving (no retries, crons, webhooks, second device, concurrent users).
+- The user asks for a code review, a test, or a fix, not for an exhaustive check.
+- You cannot name the question in one sentence; a model of an unclear question proves nothing.
+
+Use the skill when the flow has at least 2 actors or actions that can interleave, and a wrong interleaving would cost something (money, data, access, a stuck job).
+
+If you skip it: say in one line that you skipped /tla and why, then answer the question by reading the code. Ignore the rest of this skill.
+
 ## Steps
 
 1. **Pick the question.** One sentence: "Can a user ever X without Y?" or "Does every job reach done or failed?". If the user did not give one, propose it before modelling.
