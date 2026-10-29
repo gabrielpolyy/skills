@@ -5,7 +5,7 @@ description: Review a code delta, existing repository source, or supplied audit 
 
 # Sol review
 
-Run an autonomous review–fix–test loop using **gpt-5.6-sol at xhigh** for each
+Run an autonomous review–fix–test loop using **gpt-6.1-sol at xhigh** for each
 fresh, read-only review. The current session owns investigation, fixes and
 testing; the reviewer only reports findings. Invoking this skill authorizes
 in-scope local corrections without asking the user to approve each finding or
@@ -37,7 +37,7 @@ honor that narrower request instead.
    bash "$skill_dir/review.sh" --paths "$changed_paths" "$scope" "$target_repo"
    ```
 
-   The wrapper pins codex, gpt-5.6-sol, and xhigh regardless of inherited
+   The wrapper pins codex, gpt-6.1-sol, and xhigh regardless of inherited
    `REVIEW_*` settings. If the user explicitly requests another effort, pass
    `--effort medium`, `--effort high`, or `--effort xhigh`; otherwise use the
    default. Never substitute another model. Requires Bash, Git, and an

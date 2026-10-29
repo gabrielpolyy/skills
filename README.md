@@ -27,7 +27,7 @@ The calling session handles fixes and tests; each independent reviewer stays rea
 
 | Skill | Reviewer | Default effort |
 |---|---|---|
-| [`sol-review`](sol-review/SKILL.md) | `gpt-5.6-sol` via Codex | xhigh |
+| [`sol-review`](sol-review/SKILL.md) | `gpt-6.1-sol` via Codex | xhigh |
 | [`astra-review`](astra-review/SKILL.md) | `gpt-6-astra` via Codex | high |
 | [`fable-review`](fable-review/SKILL.md) | `fable` via Claude Code | high |
 
