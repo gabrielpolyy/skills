@@ -5,7 +5,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 REVIEW_SKILLS = ("sol-review", "astra-review", "fable-review")
-SKILLS = (*REVIEW_SKILLS, "app-store-release")
+SKILLS = (*REVIEW_SKILLS, "app-store-release", "tla", "wf")
 
 class SkillFileTests(unittest.TestCase):
     def test_expected_skills_are_discoverable(self):

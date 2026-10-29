@@ -1,13 +1,25 @@
 # useful-skills
 
-Reusable skills for Codex and Claude Code, including App Store releases and
-three independent reviewers.
+Reusable skills for Codex and Claude Code: App Store releases, three
+independent reviewers, a TLA+-style flow model checker and a parallel-agent
+workflow runner.
 
 [`app-store-release`](app-store-release/SKILL.md) prepares iOS version/build
 bumps, pushes Fastlane metadata, archives and uploads with Xcode, and attaches
 the processed build in App Store Connect. It discovers each project's own
 configuration and credentials. Invoke `$app-store-release` in Codex or
 `/app-store-release` in Claude Code.
+
+[`tla`](tla/SKILL.md) model-checks a user flow or stateful feature
+TLA+-style with a small exhaustive Node checker (`tla/bin/mc.mjs`), no Java.
+Write a tiny spec of the real code paths, explore every reachable state, and
+map a counterexample trace back to code. Invoke `/tla` in Claude Code or
+`$tla` in Codex; it needs Node.
+
+[`wf`](wf/SKILL.md) runs the current task as a Workflow of up to N parallel
+Claude Opus 5.5 agents (default 5) when the task warrants it, then runs
+`/astra-review` on the result. Invoke `/wf`, `/wf <N>` or `/wf <N> <task>`.
+It needs the Claude Code Workflow tool, so it is Claude Code only.
 
 For code reviews, work in your chosen
 session model to plan, implement, and test, then invoke a reviewer when ready.
@@ -58,9 +70,9 @@ symlinks on macOS/Linux and directory junctions on Windows. Rerun after
 `opus-codex`, `fable-codex`) and refuses to overwrite unrelated skills.
 
 For custom destinations, repeat `--skills-dir DIR`. Start a new session to
-refresh skill discovery. Invoke `/sol-review`, `/astra-review`, or
-`/fable-review` in Claude Code; use `$sol-review`, `$astra-review`, or
-`$fable-review` in Codex. Each review skill requires Bash, Git, and its reviewer's
+refresh skill discovery. Invoke `/sol-review`, `/astra-review`,
+`/fable-review`, `/tla` or `/wf` in Claude Code; use `$sol-review`,
+`$astra-review`, `$fable-review` or `$tla` in Codex. Each review skill requires Bash, Git, and its reviewer's
 CLI installed and logged in. On Windows use Git Bash for the review helpers.
 
 The repository is the canonical source; both installed paths point to it.

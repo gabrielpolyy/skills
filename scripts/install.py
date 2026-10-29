@@ -6,7 +6,8 @@ import os
 from pathlib import Path
 import subprocess
 
-CURRENT = ("sol-review", "astra-review", "fable-review", "app-store-release")
+CURRENT = ("sol-review", "astra-review", "fable-review", "app-store-release",
+           "tla", "wf")
 RETIRED = ("codex-review", "codex-implement", "opus-codex", "fable-codex",
            "low", "high", "scientific", "hard")
 
