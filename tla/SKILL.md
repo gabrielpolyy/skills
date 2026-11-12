@@ -32,7 +32,7 @@ If you skip it: say in one line that you skipped /tla and why, then answer the q
    - `invariants` predicates must return true in every reachable state.
    - `eventually` goals must remain reachable from every state. A cycle with an exit to the goal passes, even if execution can loop forever.
    - Name assumptions in a comment block at the top of the spec.
-4. **Run** the checker. Exit 0 prints `PASS <states>`. Exit 1 prints the failed property and the numbered trace from `Init`.
+4. **Run** the checker. Exit 0 prints `PASS <states>`. Exit 1 prints the failed property and the numbered trace from `Init`. Exit 2 prints `ERROR`: the spec is malformed or the model passed the state limit. An `ERROR` is not a result; correct the spec and run again.
 5. **Read the trace** state by state. Map each step to a file:line in the code. Decide: real bug, or model too loose? If the model is too loose, tighten it and rerun. Never weaken the property to make it pass.
 6. **Report**: the question, the model's assumptions, the result, the trace as a numbered list with code pointers, and the fix or the next check. If a bug is confirmed, add a regression test in the code too; the spec is not the test.
 
@@ -52,14 +52,14 @@ export const eventually = { AllActive: (s) => USERS.every((u) => s.state[u] === 
 export const deadlock = false;   // true: a state with no successor is an error
 ```
 
-- `init`: non-empty array of start states (plain JSON-able objects).
-- `actions`: name → function from a state to an array of next states (empty array = not enabled). The checker passes a deep clone, so mutating and returning `[s]` is fine.
+- `init`: non-empty array of start states. Every state holds plain JSON values only; the checker rejects a `Set`, `Map`, `NaN` or class instance.
+- `actions`: name → function from a state to an array of next states (empty array = not enabled). The checker passes one deep clone per call, so mutating and returning `[s]` is fine for one successor. For 2 or more successors (for example inside `each`), build each from a copy: `{ ...s }` or `structuredClone(s)`. The checker rejects a changed input that has several successors.
 - `invariants`, `eventually`: name → predicate.
 
 ## Pitfalls
 
 - `eventually` checks goal reachability (AG EF), not guaranteed progress or fairness. A retry bound removes possible runs; it does not prove completion without that bound. Use a temporal model checker if the question requires guaranteed progress.
-- State explosion: cut constants before cutting actions. Runtime and memory depend on both states and transitions.
+- State explosion: cut constants before cutting actions. Runtime and memory depend on both states and transitions. The checker stops at 1,000,000 states (about 2.4 GB of memory); a second argument sets another limit.
 - Guards that return `false` instead of `[]` cause an error. Use the `each` helper or `|| []`.
 - Time-based rules (daily quota reset, expiry) become an explicit `Tick` action with a bounded clock.
-- No local dev DB in vt: never "verify" the model by writing to prod. Verify against code and tests.
+- Never "verify" the model by writing to a shared or production database. Verify against code and tests.

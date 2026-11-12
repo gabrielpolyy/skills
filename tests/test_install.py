@@ -130,6 +130,19 @@ class InstallTests(unittest.TestCase):
         installer.install(self.repo, [link / "skills"])
         self.assert_installed(real / "skills")
 
+    def test_two_spellings_of_one_destination_install_once(self):
+        real = Path(self.temp.name) / "real"
+        real.mkdir()
+        link = Path(self.temp.name) / "link"
+        link_directory(link, real)
+        installer.install(self.repo, [real / "skills", link / "skills"])
+        self.assert_installed(real / "skills")
+
+    def test_installer_lists_every_skill_in_the_repository(self):
+        root = Path(__file__).resolve().parents[1]
+        self.assertEqual(sorted(installer.CURRENT),
+                         sorted(p.parent.name for p in root.glob("*/SKILL.md")))
+
 
 class CommandLineTests(unittest.TestCase):
     """The real repository is linked into a fake home; nothing outside it is touched."""

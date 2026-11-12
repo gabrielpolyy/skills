@@ -129,6 +129,51 @@ class ReviewTests(unittest.TestCase):
             self.assertTrue(r.stdout.endswith("NO_CHANGES\n"))
             self.assertFalse(self.prompt.exists())
 
+    def test_user_diff_config_does_not_hide_the_patch_or_reviewer_writes(self):
+        self.commit_base()
+        (self.repo / "a.txt").write_text("changed\n")
+        env = dict(self.env, GIT_CONFIG_COUNT="2",
+                   GIT_CONFIG_KEY_0="diff.external", GIT_CONFIG_VALUE_0="true",
+                   GIT_CONFIG_KEY_1="color.ui", GIT_CONFIG_VALUE_1="always")
+        r = self.review(env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("+changed", self.prompt.read_text())
+        self.assertNotIn("\x1b[", self.prompt.read_text())
+        r = self.review(env=dict(env, FAKE_CLAUDE_MODE="run", FAKE_CLAUDE_CMD="echo tamper >> a.txt"))
+        self.assertIn("WARNING: a working tree changed", r.stdout)
+
+    def test_range_base_must_be_an_ancestor_of_its_head(self):
+        self.commit_base()
+        base = self.git("rev-parse", "HEAD").decode().strip()
+        commit = ("-c", "user.name=Test", "-c", "user.email=t@example.com", "commit", "-qm")
+        self.git("checkout", "-q", "-b", "feature")
+        (self.repo / "feature.txt").write_text("feature\n")
+        self.git("add", ".")
+        self.git(*commit, "feature")
+        self.git("checkout", "-q", "-b", "upstream", base)
+        (self.repo / "upstream.txt").write_text("upstream only\n")
+        self.git("add", ".")
+        self.git(*commit, "upstream")
+        # A plain diff upstream -> feature would show upstream.txt as deleted by the feature.
+        r = self.review("--range", "upstream..feature")
+        self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+        self.assertIn(f"use --range {base}..feature", r.stdout)
+        self.assertFalse(self.prompt.exists())
+        r = self.review("--range", f"{base}..feature")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("upstream.txt", self.prompt.read_text())
+
+    def test_binary_file_in_a_committed_range_is_explicitly_omitted(self):
+        self.commit_base()
+        (self.repo / "binary.dat").write_bytes(b"\x00secretbinary\x00")
+        self.git("add", ".")
+        self.git("-c", "user.name=Test", "-c", "user.email=t@example.com", "commit", "-qm", "binary")
+        r = self.review("--range", "HEAD~1..HEAD")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("WARNING: review incomplete", r.stdout)
+        self.assertIn("OMITTED: binary.dat", self.prompt.read_text())
+        self.assertNotIn("secretbinary", self.prompt.read_text())
+
     def test_binary_and_large_untracked_files_are_explicitly_omitted(self):
         self.commit_base()
         (self.repo / "binary.dat").write_bytes(b"\x00secretbinary\x00")

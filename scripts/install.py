@@ -83,9 +83,13 @@ def install(repo, destinations):
     for name in CURRENT:
         if not (repo / name / "SKILL.md").is_file():
             raise ValueError(f"Missing skill: {name}")
-    destinations = dict.fromkeys(d.expanduser().absolute() for d in destinations)
+    # Two spellings of one directory would plan each link twice and fail on the second.
+    unique = {}
+    for destination in destinations:
+        destination = destination.expanduser().absolute()
+        unique.setdefault(destination.resolve(), destination)
     # Validate every destination first, so a failure in one changes nothing anywhere.
-    plans = [(destination, plan(repo, destination)) for destination in destinations]
+    plans = [(destination, plan(repo, destination)) for destination in unique.values()]
     for destination, actions in plans:
         apply(destination, actions)
 

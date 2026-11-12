@@ -157,6 +157,12 @@ if [ -n "$range" ]; then
   base_oid="$(git -C "${repos[0]}" rev-parse --verify -q "${range%%..*}^{commit}" 2>/dev/null)"
   head_oid="$(git -C "${repos[0]}" rev-parse --verify -q "${range#*..}^{commit}" 2>/dev/null)"
   if [ -z "$base_oid" ] || [ -z "$head_oid" ]; then echo "ERROR: cannot resolve range $range in ${repos[0]}"; exit 1; fi
+  # `git diff base head` is not a merge-base diff: with a base that is not an
+  # ancestor, commits made on the base side would show as reverted by the task.
+  if ! git -C "${repos[0]}" merge-base --is-ancestor "$base_oid" "$head_oid" 2>/dev/null; then
+    merge_base="$(git -C "${repos[0]}" merge-base "$base_oid" "$head_oid" 2>/dev/null)"
+    echo "ERROR: range base is not an ancestor of its head; use --range ${merge_base:-<common ancestor>}..${range#*..}"; exit 2
+  fi
 fi
 
 # Does a repo have a HEAD commit? A fresh repo with no commits has no HEAD, so
@@ -206,6 +212,10 @@ scratch="$(mktemp -d)" || { echo "ERROR: cannot create review scratch directory"
 cleanup() { rm -f -- "${out:-}" "${log:-}" 2>/dev/null || true; rm -rf -- "$scratch"; }
 trap cleanup EXIT
 fatal() { echo "ERROR: $*"; exit 1; }
+
+# A user's diff.external or color.ui=always would empty or garble every patch
+# this script reads, in the embedded delta and in the tamper fingerprint alike.
+plain_diff="--no-ext-diff --no-color"
 
 # Keep successful conversion/advice warnings out of the final-message channel,
 # while retaining stderr and exit status when inspection actually fails.
@@ -297,12 +307,12 @@ embed_delta() {
   printf '### repo: %s\n' "$dir"
   if [ -n "$range" ]; then
     printf '### diff %s %s\n' "$base_oid" "$head_oid"
-    read_git -C "$dir" -c core.pager=cat diff "$base_oid" "$head_oid" ${pathargs[@]+"${pathargs[@]}"} || return 1
+    read_git -C "$dir" -c core.pager=cat diff $plain_diff "$base_oid" "$head_oid" ${pathargs[@]+"${pathargs[@]}"} || return 1
     git -C "$dir" diff --numstat --no-renames -z "$base_oid" "$head_oid" ${pathargs[@]+"${pathargs[@]}"} > "$scratch/range-files" || return 1
     while IFS= read -r -d '' rec; do
-      case "$rec" in -*) continue ;; esac
       f="${rec#*$tab}"; f="${f#*$tab}"
       git -C "$dir" cat-file -e "$head_oid:$f" 2>/dev/null || continue
+      case "$rec" in -*) printf 'OMITTED: %s (binary; not reviewed as text)\n' "$f"; touch "$scratch/omitted"; continue ;; esac
       printf '### file at %s: %s\n' "$head_oid" "$f"
       git -C "$dir" show "$head_oid:$f" || return 1
       printf '\n'
@@ -310,11 +320,11 @@ embed_delta() {
     return 0
   fi
   printf '### status\n'
-  git -C "$dir" status --short ${pathargs[@]+"${pathargs[@]}"} || return 1
+  git -C "$dir" -c color.status=false status --short ${pathargs[@]+"${pathargs[@]}"} || return 1
   printf '### diff --cached (staged)\n'
-  read_git -C "$dir" -c core.pager=cat diff --cached ${pathargs[@]+"${pathargs[@]}"} || return 1
+  read_git -C "$dir" -c core.pager=cat diff $plain_diff --cached ${pathargs[@]+"${pathargs[@]}"} || return 1
   printf '### diff (unstaged)\n'
-  read_git -C "$dir" -c core.pager=cat diff ${pathargs[@]+"${pathargs[@]}"} || return 1
+  read_git -C "$dir" -c core.pager=cat diff $plain_diff ${pathargs[@]+"${pathargs[@]}"} || return 1
   git -C "$dir" ls-files --others --exclude-standard -z ${pathargs[@]+"${pathargs[@]}"} > "$scratch/untracked" || return 1
   while IFS= read -r -d '' f; do
     printf '### untracked file: %s\n' "$f"
@@ -533,8 +543,8 @@ snapshot_material() {
     printf '### repo: %s\n' "$dir"
     printf '### head: %s\n' "$(git -C "$dir" rev-parse --verify -q HEAD 2>/dev/null || echo NONE)"
     printf '### status\n'; git -C "$dir" status --porcelain ${excl[@]+"${excl[@]}"} || return 1
-    printf '### unstaged\n'; read_git -C "$dir" -c core.pager=cat diff ${excl[@]+"${excl[@]}"} || return 1          # worktree vs index
-    printf '### staged\n';   read_git -C "$dir" -c core.pager=cat diff --cached ${excl[@]+"${excl[@]}"} || return 1 # index vs HEAD/empty tree
+    printf '### unstaged\n'; read_git -C "$dir" -c core.pager=cat diff $plain_diff ${excl[@]+"${excl[@]}"} || return 1          # worktree vs index
+    printf '### staged\n';   read_git -C "$dir" -c core.pager=cat diff $plain_diff --cached ${excl[@]+"${excl[@]}"} || return 1 # index vs HEAD/empty tree
     git -C "$dir" ls-files --others --exclude-standard -z ${excl[@]+"${excl[@]}"} > "$scratch/snapshot-files" || return 1
     while IFS= read -r -d '' f; do
       printf '### untracked: %s\n' "$f"
@@ -593,7 +603,9 @@ case "$REVIEW_BACKEND" in
     printf '%s' "$prompt" | claude -p --model "$REVIEW_MODEL" --effort "$REVIEW_EFFORT" \
       --tools Read,Glob,Grep --strict-mcp-config --no-session-persistence "${claude_dirs[@]}" >"$out" 2>"$log" &
     ;;
-esac
+# bash 3.2 (macOS) sometimes prints "child setpgid ... Operation not permitted"
+# when it starts a job, before the reviewer's own redirections apply.
+esac 2>/dev/null
 child_pid=$!
 set +m 2>/dev/null
 wait "$child_pid"; rc=$?
@@ -616,6 +628,6 @@ if [ -n "$before" ] && [ "$before" != "$after" ]; then
   echo
 fi
 if [ -f "$scratch/omitted" ]; then
-  echo "WARNING: review incomplete: some untracked content was omitted; inspect OMITTED markers in the review scope."
+  echo "WARNING: review incomplete: some content was omitted; inspect OMITTED markers in the review scope."
 fi
 cat "$out"

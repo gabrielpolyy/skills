@@ -1,6 +1,6 @@
 ---
 name: wf
-description: Run the current task as a Workflow of up to N parallel Claude Opus 5.5 agents (default 5) when the task warrants it, otherwise do it inline; then run /astra-review on the result. Use for /wf, /wf <N>, or /wf <N> <task>. Invoking this skill is the user's explicit opt-in to multi-agent orchestration.
+description: Run the current task as a Workflow of up to N parallel Claude Opus 5.5 agents (default 5), then run /astra-review on the result; when the task does not warrant a Workflow, do it inline instead. Use for /wf, /wf <N>, or /wf <N> <task>. Invoking this skill is the user's explicit opt-in to multi-agent orchestration.
 ---
 
 # wf: up to N Opus agents, then Astra review
@@ -20,6 +20,7 @@ The user offers orchestration; you judge whether it helps. Discard the skill whe
 - The task is a lookup, a question, or a one-line fix.
 - The parts depend on each other, so parallel agents would only wait on or conflict with one another.
 - You are unsure what the task is; orchestration multiplies a wrong reading.
+- No Workflow tool is available (for example in Codex).
 
 If you discard it: say in one line that you skipped /wf and why, then do the task as you normally would. Ignore the rest of this skill.
 
@@ -41,6 +42,7 @@ Load the `workflow-authoring` skill, then call the Workflow tool with an inline 
 - Use `parallel()` for the units; they are independent.
 - Use `isolation: 'worktree'` only when agents edit the same files in parallel. When one agent owns one file set, keep them in the main tree.
 - Give each agent its unit, the file list, the tests to run, and a schema that returns `{ files: string[], summary: string, tests: string }`.
+- Give agents only fast, focused tests. The agents run at the same time, so a heavy suite (one that loads a model, builds an app or needs much memory) runs one time, by you, in Step 3.
 - `log()` what each agent returned.
 
 Script shape:
@@ -58,6 +60,7 @@ const SCHEMA = { type: 'object', properties: {
   required: ['files', 'summary', 'tests'] }
 const results = await parallel(UNITS.map((u, i) => () =>
   agent(u.prompt, { label: `work:${i + 1}`, phase: 'Work', model: 'opus', schema: SCHEMA })))
+results.forEach((r, i) => log(`work:${i + 1} ${r ? r.summary : 'no result'}`))
 return results.filter(Boolean)
 ```
 
@@ -69,7 +72,7 @@ Read the results. If the units were independent parts, confirm they merge: run t
 
 ## Step 4: Astra review
 
-Invoke the `astra-review` skill on the task's delta (the files the agents reported plus your integration edits). Follow that skill's loop to completion: every finding fixed or discarded with evidence.
+Invoke the `astra-review` skill on the task's delta (the files the agents reported plus your integration edits). Follow that skill's loop to completion: every finding fixed or discarded with evidence. If the task changed no files (research, a review, a report), skip this step and say so.
 
 ## Step 5: Report
 

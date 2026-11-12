@@ -5,8 +5,9 @@ independent reviewers, a TLA+-style flow model checker and a parallel-agent
 workflow runner.
 
 [`app-store-release`](app-store-release/SKILL.md) prepares iOS version/build
-bumps, pushes Fastlane metadata, archives and uploads with Xcode, and attaches
-the processed build in App Store Connect. It discovers each project's own
+bumps, pushes Fastlane metadata, archives and uploads with Xcode, attaches
+the processed build in App Store Connect, and submits the version for review.
+“What's New” defaults to “Improvements and fixes.” It discovers each project's own
 configuration and credentials. Invoke `$app-store-release` in Codex or
 `/app-store-release` in Claude Code.
 
@@ -105,13 +106,15 @@ targets; `--paths` limits findings/diffs, not supporting context reads.
 
 Staged and unstaged patches are kept separately, even when they cancel in the
 working copy. Empty working-tree selections and committed ranges return
-`NO_CHANGES`. Git collection errors stop before the reviewer is called.
+`NO_CHANGES`. The base of `--range` must be an ancestor of its head; for a
+branch, pass the merge base. Git collection errors stop before the reviewer is called.
 
 Fable embeds untracked text up to 128 KiB per file and 512 KiB per repository.
 Untracked symlinks include their link target without following it. Binary,
 unreadable, non-regular, or oversized untracked entries receive `OMITTED`
 markers and a final
-`WARNING:` declaring the review incomplete. Embedded deltas over 2 MiB fail
+`WARNING:` declaring the review incomplete. A binary file in a committed range
+receives the same marker. Embedded deltas over 2 MiB fail
 with an error asking for a narrower scope. `REVIEW_DRY_RUN=1` previews the
 prompt and recipe; `DRY_RUN:` is never a completed review.
 

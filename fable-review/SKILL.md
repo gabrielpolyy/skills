@@ -37,6 +37,10 @@ honor that narrower request instead.
    bash "$skill_dir/review.sh" --paths "$changed_paths" "$scope" "$target_repo"
    ```
 
+   State in the scope any trust boundary the change touches (auth, permissions,
+   user input that reaches SQL, shell or file paths, secrets, payments), so the
+   reviewer checks that boundary explicitly.
+
    The wrapper pins claude, fable, and high regardless of inherited
    `REVIEW_*` settings. If the user explicitly requests another effort, pass
    `--effort medium`, `--effort high`, or `--effort xhigh`; otherwise use the
@@ -97,8 +101,9 @@ honor that narrower request instead.
    with those dispositions explained; a literal NO_FINDINGS is not required.
    Report fixes, discards, out-of-scope findings and their reasons, validation, and the actual
    reviewer model/effort. NO_CHANGES means no matching delta, not a clean review
-   of previous fixes. Errors, empty output, KILLED:, DRY_RUN: and any WARNING:
-   mean incomplete review: diagnose and recover autonomously when possible.
+   of previous fixes. Errors, empty output, NOT_A_GIT_REPO, KILLED:, DRY_RUN:
+   and any WARNING: mean incomplete review: diagnose and recover autonomously
+   when possible.
    Do not silently substitute a model or claim completion when review failed.
 
 Do not stop merely because one review finished or an arbitrary iteration count
