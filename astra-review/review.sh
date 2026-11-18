@@ -3,6 +3,6 @@
 set -euo pipefail
 skill_dir="$(cd "$(dirname "$0")" && pwd -P)"
 export REVIEW_BACKEND=codex
-export REVIEW_MODEL=gpt-6-astra
+export REVIEW_MODEL=gpt-6.2-astra
 export REVIEW_EFFORT=high
 exec bash "$skill_dir/../scripts/review.sh" "$@"

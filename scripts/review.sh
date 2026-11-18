@@ -53,7 +53,7 @@ set -uo pipefail
 # unpinned run could silently review with a weaker model/effort.
 REVIEW_BACKEND="${REVIEW_BACKEND:-codex}"
 case "$REVIEW_BACKEND" in
-  codex)  : "${REVIEW_MODEL:=gpt-6-astra}"; : "${REVIEW_EFFORT:=high}" ;;
+  codex)  : "${REVIEW_MODEL:=gpt-6.2-astra}"; : "${REVIEW_EFFORT:=high}" ;;
   claude) : "${REVIEW_MODEL:=fable}";       : "${REVIEW_EFFORT:=high}" ;;
   *) echo "usage: REVIEW_BACKEND must be codex or claude (got '$REVIEW_BACKEND')" >&2; exit 2 ;;
 esac
